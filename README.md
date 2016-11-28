@@ -1,3 +1,4 @@
 # note
-一些杂乱的笔记，大部分来源于网络或书籍，没有经过认真的整理
-测试
+一些杂乱的笔记，大部分来源于网络或书籍
+
+http://www.chengweiyang.cn/gitbook/basic-usage/README.html
