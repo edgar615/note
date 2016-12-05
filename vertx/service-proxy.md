@@ -170,4 +170,5 @@ ProxyHelper.createProxy  方法可以创建一个服务代理类，它的实现�
           throw new IllegalStateException("Invalid action: " + action);
         }
       }
-ddd
+
+服务代理类会封装对消息
