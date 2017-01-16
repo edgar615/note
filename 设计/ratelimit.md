@@ -208,7 +208,7 @@ RateLimiter和Java中的信号量(java.util.concurrent.Semaphore)类似,Semaphor
 ## 设计
 RateLimiter的主要功能就是提供一个稳定的速率,实现方式就是通过限制请求流入的速度,比如计算请求等待合适的时间阈值.
 
-实现QPS速率的最简单的方式就是记住上一次请求的最后授权时间,然后保证1/QPS秒内不允许请求进入.比如QPS=5,如果我们保证最后一个被授权请求之后的200ms的时间内没有请求被授权,那么我们就达到了预期的速率.如果一个请求现在过来但是最后一个被授权请求是在100ms之前,那么我们就要求当前这个请求等待100ms.按照这个思路,请求15个新令牌(许可证)就需要3秒.
+**实现QPS速率的最简单的方式就是记住上一次请求的最后授权时间,然后保证1/QPS秒内不允许请求进入**.比如QPS=5,如果我们保证最后一个被授权请求之后的200ms的时间内没有请求被授权,那么我们就达到了预期的速率.如果一个请求现在过来但是最后一个被授权请求是在100ms之前,那么我们就要求当前这个请求等待100ms.按照这个思路,请求15个新令牌(许可证)就需要3秒.
 
 有一点很重要:上面这个设计思路的RateLimiter记忆非常的浅,它的脑容量非常的小,只记得上一次被授权的请求的时间.如果RateLimiter的一个被授权请求q之前很长一段时间没有被使用会怎么样?这个RateLimiter会立马忘记过去这一段时间的利用不足,而只记得刚刚的请求q.
 
@@ -463,6 +463,57 @@ SmoothBursty允许一定程度的突发，但假设突然连了很大的流量�
 
 通过输出可以看到,速率是梯形上升速率，也就是说冷启动会以一个比较大的速率慢慢到平均速率；然后趋于平均速率
 
+## 内部实现
+SmoothWarmingUp的acquire方法最终会调用reserveEarliestAvailable方法
+
+	public double acquire(int permits) {
+		long microsToWait = reserve(permits);
+		stopwatch.sleepMicrosUninterruptibly(microsToWait);
+		return 1.0 * microsToWait / SECONDS.toMicros(1L);
+	}
+	  
+	final long reserve(int permits) {
+		checkPermits(permits);
+		synchronized (mutex()) {
+		  return reserveAndGetWaitLength(permits, stopwatch.readMicros());
+		}
+	}  
+	
+	final long reserveAndGetWaitLength(int permits, long nowMicros) {
+		long momentAvailable = reserveEarliestAvailable(permits, nowMicros);
+		return max(momentAvailable - nowMicros, 0);
+	}
+	  
+	final long reserveEarliestAvailable(int requiredPermits, long nowMicros) {
+		resync(nowMicros);
+		long returnValue = nextFreeTicketMicros;
+		double storedPermitsToSpend = min(requiredPermits, this.storedPermits);
+		double freshPermits = requiredPermits - storedPermitsToSpend;
+	
+		long waitMicros = storedPermitsToWaitTime(this.storedPermits, storedPermitsToSpend)
+			+ (long) (freshPermits * stableIntervalMicros);
+	
+		this.nextFreeTicketMicros = nextFreeTicketMicros + waitMicros;
+		this.storedPermits -= storedPermitsToSpend;
+		return returnValue;
+	}
+
+	private void resync(long nowMicros) {
+		// if nextFreeTicket is in the past, resync to now
+		if (nowMicros > nextFreeTicketMicros) {
+		  storedPermits = min(maxPermits,
+			  storedPermits + (nowMicros - nextFreeTicketMicros) / stableIntervalMicros);
+		  nextFreeTicketMicros = nowMicros;
+		}
+	}
+
+仔细阅读代码可以发现，token数量的计算是通过下面的方法来实现的：
+
+	storedPermits = min(maxPermits,
+			  storedPermits + (nowMicros - nextFreeTicketMicros) / stableIntervalMicros);
+
+我们可以在桶中存放剩余的令牌数量和上一次访问的时间戳，当用户请求获取一个令牌的时候，根据当前时间戳，计算从上一次访问的时间戳开始，到现在的这个时间点应该向桶中添加的令牌数量，从而获得当前令牌桶中剩余的令牌数**(如果桶满了，直接取桶的最大容量)**。
+
 # redis实现RateLimit
 https://redis.io/commands/INCR#pattern-rate-limiter
 
@@ -607,7 +658,7 @@ java代码
 针对上述的情况，只有一个计数器是不够的。我们需要将整个流量控制（1小时240次调用）看做一个大的计数桶，然后将这个大的桶拆分成一堆小桶，在每个小桶里都有自己的个性计数。我们可以使用1分钟、5分钟或者15分钟的小桶来拆分1小时的桶（这取决于系统需求，更小的桶意味着更多的内存和清理工作）。
 例如我们将1小时的水桶拆分为了1分钟的小桶，那么我们会记录6:00PM,6:01PM,6:02PM的调用次数。但当时间变为7:00PM时，我们需要将6:00PM的桶重置为0，并重新标记桶7:00PM。在7:01PM时会对6:01PM和7:01PM的桶做同样的操作。但是这种实现太复杂，很难做到复杂的限制规则。
 
-## 优化
+## 优化方法1
 针对上面描述的时间边界问题，我们可以借助redis的list数据类型来实现.我们在list中保存了过去每次请求的时间戳记录
 
 <table>
@@ -665,9 +716,289 @@ java代码
 	</tbody>
 </table>
 
-但是这个方法在并发大的情况下会对内存有较高的要求，例如每个用户一个队列，每个队列1000个字节，如果有100万个用户的限流规则，那么久会占用1000*100W≈1G的内存。
+lua代码
+
+	--两种规则，1秒钟1次请求，每分钟5次请求，为简单起见，规则未使用参数传入
+	local current_timestamp = tonumber(ARGV[1]) -- 当前请求的时间
+	local key = "rate.limit2:" .. KEYS[1] --限流KEY
+	
+	--删除列表中超过1分钟的请求
+	redis.pcall('ZREMRANGEBYSCORE', key, 0, current_timestamp - 60)
+	
+	local passed1 = true
+	local passed2 = true
+	--获取第一个请求
+	local last_drip = redis.pcall('ZREVRANGEBYSCORE', key, '+inf', '-inf', 'LIMIT', 0, 1)
+	
+	--比较上次的时间戳和当前请求的时间戳
+	if last_drip[1] then
+	    --上次请求的时间
+	    local last_time = tonumber(last_drip[1])
+	    passed1 = current_timestamp >=  (last_time + 1)
+	end
+	
+	--获取前5个请求
+	local last_drip = redis.pcall('ZREVRANGEBYSCORE', key, '+inf', '-inf', 'LIMIT', 0, 5)
+	
+	--比较上次的时间戳和当前请求的时间戳
+	if last_drip[5] then
+	    --第5次请求的时间
+	    local last_time = tonumber(last_drip[5])
+	    passed2  = current_timestamp >=  (last_time + 60)
+	end
+	
+	if passed1 and passed2 then
+	  redis.pcall('ZADD', key, current_timestamp, current_timestamp)
+	end
+	--设置1分钟过期
+	redis.call('EXPIRE', key, 60)
+	return {current_timestamp,last_drip, passed1, passed2}
+
+测试代码
+
+    System.out.println(new LimitTest3().accessLimit("192.168.1.100", jedis));
+    System.out.println(new LimitTest3().accessLimit("192.168.1.100", jedis));
+    TimeUnit.SECONDS.sleep(1);
+    System.out.println(new LimitTest3().accessLimit("192.168.1.100", jedis));
+    TimeUnit.SECONDS.sleep(1);
+    System.out.println(new LimitTest3().accessLimit("192.168.1.100", jedis));
+    TimeUnit.SECONDS.sleep(1);
+    System.out.println(new LimitTest3().accessLimit("192.168.1.100", jedis));
+    TimeUnit.SECONDS.sleep(1);
+    System.out.println(new LimitTest3().accessLimit("192.168.1.100", jedis));
+    TimeUnit.SECONDS.sleep(1);
+    System.out.println(new LimitTest3().accessLimit("192.168.1.100", jedis));
+    TimeUnit.SECONDS.sleep(61);
+    System.out.println(new LimitTest3().accessLimit("192.168.1.100", jedis));
+
+输出
+
+	[1484551710, [], 1, 1]
+	[1484551710, [1484551710], null, 1]
+	[1484551711, [1484551710], 1, 1]
+	[1484551712, [1484551711, 1484551710], 1, 1]
+	[1484551713, [1484551712, 1484551711, 1484551710], 1, 1]
+	[1484551714, [1484551713, 1484551712, 1484551711, 1484551710], 1, 1]
+	[1484551715, [1484551714, 1484551713, 1484551712, 1484551711, 1484551710], 1, null]
+	[1484551776, [], 1, 1]
+
+通过输出我们可以看到:
+
+- 第1个请求通过
+- 第2个请求没有通过每秒1次请求的规则
+- 等待1秒钟后请求通过
+- 等待1秒钟后请求通过
+- 等待1秒钟后请求通过
+- 等待1秒钟后请求通过
+- 等待1秒钟后没有通过每分钟5次请求的规则
+- 等待一分钟后请求通过
+
+**但是这个方法在并发大的情况下会对内存有较高的要求，例如每个用户一个队列，每个队列1000个字节，如果有100万个用户的限流规则，那么就会占用1000*100W≈1G的内存**。
 
 参考 https://blog.domaintools.com/2013/04/rate-limiting-with-redis/
+https://engineering.classdojo.com/blog/2015/02/06/rolling-rate-limiter/
+
+## 优化方法2
+可以参考Guava的实现，基于redis实现自己的令牌桶:
+
+- 每个限流规则都有两个key：令牌桶中可用的令牌数、上次补充令牌的时间戳，**用hash存储**
+- 如果收到新的请求，保存当前请求的时间戳
+- 计算从上次的时间戳到当前时间应该添加的令牌数
+- 计算令牌桶中最终可用的令牌数，如果桶满，直接取桶容量
+
+lua代码
+
+	local current_timestamp_ms = tonumber(ARGV[1]) -- 当前请求的时间
+	local rate        = tonumber(ARGV[2]) -- 速率，每秒中向桶中存入多少令牌
+	local interval = 1000 / tonumber(ARGV[2]) --放入令牌的间隔时间，1000毫秒/速率
+	local bucket_size          = tonumber(ARGV[3]) -- 令牌桶的最大容量
+	local available_tokens          = tonumber(ARGV[3]) -- 当前可用的令牌数量，默认等于令牌桶的大小
+	local tokens_to_take       = tonumber(ARGV[4]) --当前请求的需要的令牌数量
+	local key = "rate.limit:" .. KEYS[1] --限流KEY
+	
+	 --last_drip:上次请求的时间,content：剩余的令牌数量
+	local current = redis.pcall('HMGET', key, 'last_drip', 'available_tokens')
+	
+	if current.err ~= nil then
+	    redis.call('DEL', key)
+	    current = {}
+	end
+	
+	--根据上次的时间戳与当前时间戳计算应该添加的令牌数
+	if current[1] then
+	    --上次请求的时间
+	    local last_drip = current[1]
+	    local content = current[2]
+	
+	    --计算应该生成的令牌数
+	    local delta_ms = math.max(current_timestamp_ms - last_drip, 0)
+	    local drip_amount = math.floor(delta_ms / interval)
+	
+	    --如果桶满，直接使用桶的容量
+	    available_tokens = math.min(content + drip_amount, bucket_size)
+	end
+	
+	-- 计算是否有足够的令牌给调用方
+	local enough_tokens = available_tokens >= tokens_to_take
+	
+	-- 将令牌给调用方之后，桶中剩余的令牌数
+	if enough_tokens then
+	    available_tokens = math.min(available_tokens - tokens_to_take, bucket_size)
+	end
+	
+	--重新设置令牌桶
+	redis.call('HMSET', key,
+	            'last_drip', current_timestamp_ms,
+	            'available_tokens', available_tokens)
+	
+	--如果没有新的请求过来，在桶满之后可以直接将该令牌删除，节省空间
+	redis.call('PEXPIRE', key, math.ceil(bucket_size *  interval))
+	
+	return { current_timestamp_ms, available_tokens, enough_tokens }
+
+
+Java代码
+
+	public class TokenBucket {
+	  private final Jedis jedis;
+	
+	  // 向令牌桶中添加令牌的速率
+	  private final double rate;
+	
+	  // 令牌桶的最大容量
+	  private final int size;
+	
+	  private final String key;
+	
+	  public TokenBucket(Jedis jedis, double rate, int size, String key) {
+	    this.jedis = jedis;
+	    this.rate = rate;
+	    this.size = size;
+	    this.key = key;
+	  }
+	
+	  public Object acquire(int permits) throws IOException {
+	    List<String> keys = Collections.singletonList(key);
+	    List<String> argv =
+	            Arrays.asList(String.valueOf(System.currentTimeMillis()), String.valueOf(rate)
+	                    , String.valueOf(size), String.valueOf(permits));
+	
+	    return jedis.eval(loadScriptString("token_bucket.lua"), keys, argv);
+	  }
+	
+	  // 加载Lua代码
+	  private String loadScriptString(String fileName) throws IOException {
+	    Reader reader =
+	            new InputStreamReader(
+	                    TokenBucketTest.class.getClassLoader().getResourceAsStream(fileName));
+	    return CharStreams.toString(reader);
+	  }
+	}
+
+测试程序
+
+    System.out.println(new TokenBucket(jedis, 1, 10,  "192.168.1.100").acquire(8));
+    System.out.println(new TokenBucket(jedis, 1, 10,  "192.168.1.100").acquire(4));
+    TimeUnit.SECONDS.sleep(3);
+    System.out.println(new TokenBucket(jedis, 1, 10, "192.168.1.100").acquire(4));
+    TimeUnit.SECONDS.sleep(3);
+    System.out.println(new TokenBucket(jedis, 1, 10, "192.168.1.100").acquire(4));
+    System.out.println(new TokenBucket(jedis, 1, 10, "192.168.1.100").acquire(1));
+
+    TimeUnit.SECONDS.sleep(15);
+    System.out.println(new TokenBucket(jedis, 1, 10, "192.168.1.100").acquire(1));
+
+输出
+
+	[1484548042632, 2, 1]
+	[1484548042655, 2, null]
+	[1484548045658, 1, 1]
+	[1484548048661, 0, 1]
+	[1484548048664, 0, null]
+	[1484548063667, 9, 1]
+
+通过输出我们可以看到:
+
+- 第1个请求获取到了8个令牌此时桶中还剩余2个令牌
+- 第2个请求没有获取到足够的令牌
+- 等待3秒钟后桶中有5个令牌，第3个请求获取到了足够的令牌
+- 再次等待3秒，第4个请求获取到了4个令牌，桶中没有剩余的令牌
+- 第5个请求没有获取到足够的令牌
+- 第6个请求虽然等待了15秒，但是桶中最大的令牌数是10，所以最后桶中还剩下9个令牌
+
+查看限流的KEY
+
+	127.0.0.1:6379> ttl rate.limit:192.168.1.100
+	(integer) 7
+	127.0.0.1:6379> ttl rate.limit:192.168.1.100
+	(integer) 10
+	127.0.0.1:6379> ttl rate.limit:192.168.1.100
+	(integer) 9
+	127.0.0.1:6379> ttl rate.limit:192.168.1.100
+	(integer) 2
+	127.0.0.1:6379> ttl rate.limit:192.168.1.100
+	(integer) -2
+
+在没有新的请求之后，key在10秒后被删除
+
+上述的代码存在一个小小的隐患，当前请求的current_timestamp_ms是由调用方传入的，在分布式环境下，有可能有的调用方传入的时间不正确导致令牌获取错误。所以我们需要在lua脚本中生成当前请求的毫秒数，然而由于lua的标准库未提供获取毫秒数的函数，我通过redis的TIME命令用当前时间戳和微妙数计算出了毫秒数
+
+	local rate        = tonumber(ARGV[1]) -- 速率，每秒中向桶中存入多少令牌
+	local interval = 1000 / tonumber(ARGV[1]) --放入令牌的间隔时间，1000毫秒/速率
+	local bucket_size          = tonumber(ARGV[2]) -- 令牌桶的最大容量
+	local available_tokens          = tonumber(ARGV[2]) -- 当前可用的令牌数量，默认等于令牌桶的大小
+	local tokens_to_take       = tonumber(ARGV[3]) --当前请求的需要的令牌数量
+	local key = "rate.limit:" .. KEYS[1] --限流KEY
+	
+	--借助TIME 计算当前请求的时间
+	local current_time = redis.pcall('TIME')
+	local current_second = current_time[1]
+	local current_microsecond = current_time[2]
+	local current_millisecond = math.floor(tonumber(current_microsecond) / 1000)
+	local current_timestamp_ms = tonumber(current_second ... current_millisecond)
+	
+	
+	 --last_drip:上次请求的时间,content：剩余的令牌数量
+	local current = redis.pcall('HMGET', key, 'last_drip', 'available_tokens')
+	
+	if current.err ~= nil then
+	    redis.call('DEL', key)
+	    current = {}
+	end
+	
+	--根据上次的时间戳与当前时间戳计算应该添加的令牌数
+	if current[1] then
+	    --上次请求的时间
+	    local last_drip = current[1]
+	    local content = current[2]
+	
+	    --计算应该生成的令牌数
+	    local delta_ms = math.max(current_timestamp_ms - last_drip, 0)
+	    local drip_amount = math.floor(delta_ms / interval)
+	
+	    --如果桶满，直接使用桶的容量
+	    available_tokens = math.min(content + drip_amount, bucket_size)
+	end
+	
+	-- 计算是否有足够的令牌给调用方
+	local enough_tokens = available_tokens >= tokens_to_take
+	
+	-- 将令牌给调用方之后，桶中剩余的令牌数
+	if enough_tokens then
+	    available_tokens = math.min(available_tokens - tokens_to_take, bucket_size)
+	end
+	
+	--重新设置令牌桶
+	redis.call('HMSET', key,
+	            'last_drip', current_timestamp_ms,
+	            'available_tokens', available_tokens)
+	
+	--如果没有新的请求过来，在桶满之后可以直接将该令牌删除。
+	redis.call('PEXPIRE', key, math.ceil(bucket_size *  interval))
+	
+	return { current_timestamp_ms, available_tokens, enough_tokens }
+
+参考:https://github.com/auth0/limitd/blob/master/lib/db/redis/drip_and_take.lua
 
 # nginx接入层限流
 工作中没涉及到
