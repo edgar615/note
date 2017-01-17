@@ -8,7 +8,27 @@ http://blog.csdn.net/hengyunabc/article/details/19025973
 
 http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=403837240&idx=1&sn=ae9f2bf0cc5b0f68f9a2213485313127&mpshare=1&scene=23&srcid=1013Mv1Ub3adzOqb6QY7zZvG#rd
 
-我们在对数据库集群作扩容时，为了保证负载的平衡，需要在不同的Shard之间进行数据的移动， 如果主键不唯一，我们就没办法这样随意的移动数据.
+http://engineering.intenthq.com/2015/03/icicle-distributed-id-generation-with-redis-lua/
+
+# 什么是ID
+一个ID可以是很多东西，但它最重要的特性肯定是**“唯一性”**。如果你用ID标记了一段数据，那么你要确保在你的ID再次查找数据后，你不会有歧义或者冲突。
+
+ID还可能有一些其他有用的属性：
+
+- 趋势有序：直接根据主键就可以进行时间排序，而不是单独在时间列上建立普通索引**主键上的聚集索引要比普通索引更快**
+- 全局唯一：我们在对数据库集群作扩容时，为了保证负载的平衡，需要在不同的Shard之间进行数据的移动， 如果主键不唯一，我们就没办法这样随意的移动数据.
+- 有意义：ID可以包含一些特定的信息，例如生成时间
+- 紧凑：尽可能紧凑的格式，占用更小的空间
+
+## 时间
+保持时间一致实际上是一个很难解决的问题。问题的核心是计算机的**“时钟漂移”**问题，其中时钟可能不断向前或向后倾斜远离实际时间，甚至每台电脑会以不同的速率漂移。
+
+这个问题可以通过一个配置原子钟或GPS装置的专用服务器做时间服务器(例如NTP服务器)，已尽可能保证每台电脑上的时间准确。但是NTP服务允许向后移动时间补偿时钟漂移，这需要我们在生成基于时间的ID的时候保证不会产生重复ID。
+
+所以在分布式环境中，我们不能保证时间永远不变，也不能仅仅依靠时间进行排序或识别
+
+## 排序
+在传统的SQL数据库，我们使用自动递增主键来实现排序
 
 # UUID
 采用UUID作为主键是最简单的方案.
@@ -25,51 +45,6 @@ http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=403837240&idx=1&sn=ae9f2bf0
 	
 	    550e8400-e29b-41d4-a716-446655440000 
 
-## UUID具有以下涵义：
-
-**经由一定的算法机器生成**
-为了保证UUID的唯一性，规范定义了包括网卡MAC地址、时间戳、名字空间（Namespace）、随机或伪随机数、时序等元素，以及从这些元素生成UUID的算法。UUID的复杂特性在保证了其唯一性的同时，意味着只能由计算机生成。
-
-**非人工指定，非人工识别**
-UUID是不能人工指定的，除非你冒着UUID重复的风险。UUID的复杂性决定了“一般人“不能直接从一个UUID知道哪个对象和它关联。
-
-**在特定的范围内重复的可能性极小**
-UUID的生成规范定义的算法主要目的就是要保证其唯一性。但这个唯一性是有限的，只在特定的范围内才能得到保证，这和UUID的类型有关（参见UUID的版本）。
-
-## UUID的版本
-UUID具有多个版本，每个版本的算法不同，应用范围也不同。
-首先是一个特例－－Nil UUID－－通常我们不会用到它，它是由全为0的数字组成，如下：
-00000000-0000-0000-0000-000000000000
-
-### UUID Version 1：基于时间的UUID
-基于时间的UUID通过计算当前时间戳、随机数和机器MAC地址得到。由于在算法中使用了MAC地址，这个版本的UUID可以保证在全球范围的唯一性。但与此同时，使用MAC地址会带来安全性问题，这就是这个版本UUID受到批评的地方。如果应用只是在局域网中使用，也可以使用退化的算法，以IP地址来代替MAC地址－－Java的UUID往往是这样实现的（当然也考虑了获取MAC的难度）。
-
-### UUID Version 2：DCE安全的UUID
-DCE（Distributed Computing Environment）安全的UUID和基于时间的UUID算法相同，但会把时间戳的前4位置换为POSIX的UID或GID。这个版本的UUID在实际中较少用到。
-
-### UUID Version 3：基于名字的UUID（MD5）
-基于名字的UUID通过计算名字和名字空间的MD5散列值得到。这个版本的UUID保证了：相同名字空间中不同名字生成的UUID的唯一性；不同名字空间中的UUID的唯一性；相同名字空间中相同名字的UUID重复生成是相同的。
-
-### UUID Version 4：随机UUID
-根据随机数，或者伪随机数生成UUID。这种UUID产生重复的概率是可以计算出来的，但随机的东西就像是买彩票：你指望它发财是不可能的，但狗屎运通常会在不经意中到来。
-
-### UUID Version 5：基于名字的UUID（SHA1）
-和版本3的UUID算法类似，只是散列值计算使用SHA1（Secure Hash Algorithm 1）算法。
-
-## UUID的应用
-从UUID的不同版本可以看出，
-Version 1/2适合应用于分布式计算环境下，具有高度的唯一性；
-Version 3/5适合于一定范围内名字唯一，且需要或可能会重复生成UUID的环境下；
-至于Version 4，个人的建议是最好不用（虽然它是最简单最方便的）。
-通常我们建议使用UUID来标识对象或持久化数据，但以下情况最好不使用UUID：
-映射类型的对象。比如只有代码及名称的代码表。
-人工维护的非系统生成对象。比如系统中的部分基础数据。
-对于具有名称不可重复的自然特性的对象，最好使用Version 3/5的UUID。比如系统中的用户。如果用户的UUID是Version 1的，如果你不小心删除了再重建用户，你会发现人还是那个人，用户已经不是那个用户了。（虽然标记为删除状态也是一种解决方案，但会带来实现上的复杂性。）
-
-https://www.zhihu.com/question/34876910/answer/88924223
-
-## 优缺点
-UUID作为主键的优缺点分别如下
 优点：
 
 - 本地生成ID，不需要进行远程调用，时延低
@@ -90,9 +65,21 @@ UUID作为主键的优缺点分别如下
 	    PRIMARY KEY (`tablename`)  
 	) ENGINE=InnoDB 
 
-每当需要为某个表的新纪录生成ID时就从Sequence表中取出对应表的nextid,并将nextid的值加1后更新到数据库中以备下次使用。此方案也较简单，但缺点同样明显：由于所有插入任何都需要访问该表，该表很容易成为系统性能瓶颈，同时它也存在单点问题，一旦该表数据库失效，整个应用程序将无法工作。有人提出使用Master-Slave进行主从同步，但这也只能解决单点问题，并不能解决读写比为1:1的访问压力问题。
+每当需要为某个表的新纪录生成ID时就从Sequence表中取出对应表的nextid,并将nextid的值加1后更新到数据库中以备下次使用。
 
-# flickr的方案
+优点：
+
+- 简单，使用数据库已有的功能
+- 能够保证唯一性
+- 能够保证递增性
+- 步长固定
+
+缺点：
+
+- 可用性难以保证：数据库常见架构是一主多从+读写分离，生成自增ID是写请求，主库挂了就玩不转了
+- 扩展性差，性能有上限：因为写入是单点，数据库主库的写性能决定ID的生成性能上限，并且难以扩展
+
+# flickr的方案:MySQL自增字段
 http://code.flickr.net/2010/02/08/ticket-servers-distributed-unique-primary-keys-on-the-cheap/
 
 ![](http://ww1.sinaimg.cn/large/67a6a651gw1dujgqcx9ncj.jpg)
@@ -272,11 +259,226 @@ Twitter-Snowflake算法产生的背景相当简单，为了满足Twitter每秒�
 ## 优缺点
 优点：充分把信息保存到ID里。
 
-缺点：结构略复杂，要依赖zookeeper。分片ID不能灵活生成。
+缺点：结构略复杂，要依赖zookeeper,分片ID不能灵活生成。而且由于“没有一个全局时钟”，每台服务器分配的ID是绝对递增的，但从全局看，生成的ID只是趋势递增的（有些服务器的时间早，有些服务器的时间晚）
+
+在数据量大时往往需要分库分表，这些ID经常作为取模分库分表的依据，为了分库分表后数据均匀，ID生成往往有“取模随机性”的需求，所以我们通常把每秒内的序列号放在ID的最末位，保证生成的ID是随机的。同时我们在跨毫秒时，序列号总是归0，会使得序列号为0的ID比较多，导致生成的ID取模后不均匀。解决方法是，序列号不是每次都归0，而是归一个0到9的随机数.
+
+## 简单变种
+去除机器ID，直接使用22位的自增序列
+
+64 bits组成：41bits的时间戳+22bits的自增序列
+
+0    00000.....000 0000000000000000000000
+|    |___________| |____________________|
+|        |                   |
+1bit     41bit             22bit
+
+- 第一段:1bit 预留 实际上是作为long的符号位
+- 第二段:41bit 时间标记 记录的是当前时间与元年的时间差
+- 第三段:22bit 单毫秒内自增序列 每毫秒最多可以生成4194304个ID
+
+**该ID的生成策略只能保证在同一台机器上，ID不重复**。 每毫秒可以生成4194304个ID，足够普通项目使用了。
+
+## Boundary Flake变种
+128bit组成 64bits的时间戳 + 48bits的mac地址 + 16bits的单毫秒内自增序列
+
+- 第一段:64bit 时间标记 记录的是当前时间与元年的时间差
+- 第二段:48bit mac地址
+- 第三段:16bit 单毫秒内自增序列
+
+优点：不需要zookeeper来生成分片ID。
+
+缺点：长度过长，超出了long的精度。
+
+## redis实现snowflake
+
+https://github.com/intenthq/icicle/blob/master/icicle-core/src/main/resources/id-generation.lua
+
+
+lua
+
+	local lock_key = 'id-generator-lock'
+	local sequence_key = 'id-generator-sequence'
+	local logical_shard_id_key = 'id-generator-logical-shard-id'
+	
+	local max_sequence = 4095 --自增序列的最大值
+	local min_logical_shard_id = 0 --最小的分片ID
+	local max_logical_shard_id = 1023 --最大的分片ID
+	
+	--如果存在锁标识说明当前毫秒下的自增序列已经分配完毕，必须等到下一个毫秒才能分配新的序列
+	if redis.call('EXISTS', lock_key) == 1 then
+	  redis.log(redis.LOG_NOTICE, 'Cannot generate ID, waiting for lock to expire.')
+	  return redis.error_reply('Cannot generate ID, waiting for lock to expire.')
+	end
+	
+	local sequence = redis.call('INCR', sequence_key) --自增序列+1
+	local logical_shard_id = tonumber(redis.call('GET', logical_shard_id_key)) or -1 --分片ID
+	
+	--检查分片ID
+	if logical_shard_id < min_logical_shard_id or logical_shard_id > max_logical_shard_id then
+	  redis.log(redis.LOG_NOTICE, 'Cannot generate ID, logical_shard_id invalid.')
+	  return redis.error_reply('Cannot generate ID, logical_shard_id invalid.')
+	end
+	
+	if sequence >= max_sequence then
+	  --[[
+	  如果生成的序列大于最大的序列值，设置锁标识并设置过期时间为1毫秒
+	  --]]
+	  redis.log(redis.LOG_NOTICE, 'Rolling sequence back to the start, locking for 1ms.')
+	  redis.call('SET', sequence_key, '-1')
+	  redis.call('PSETEX', lock_key, 1, 'lock')
+	  sequence = max_sequence
+	end
+	
+	--将移位计算交给客户端实现
+	local current_time = redis.call('TIME')
+	return {
+	  sequence,
+	  logical_shard_id,
+	  tonumber(current_time[1]) * 1000 + math.floor(tonumber(current_time[2]) / 1000)
+	}
+
+java代码
+
+    List<String> keys = new ArrayList<String>();
+    List<String> argv = new ArrayList<String>();
+    for (int i = 0; i < 5000; i++) {
+      List<Long> result =
+              new ArrayList<Long>(
+                      (Collection<Long>) jedis.eval(loadScriptString("id2.lua"), keys, argv));
+      long seq = result.get(0);
+      long shardId = result.get(1);
+      long time = result.get(2);
+      long id = (time << 22)
+                | (shardId << 12)
+                | seq;
+      System.out.println(id);
+    }
+
+上述的代码如果当前毫秒下的自增序列已经分配完毕，会返回一个错误信息给调用方，这就要求调用方捕获这个错误并作出相应的处理（重试或者抛出异常）。**而且自增序列增长到4094之后，即使时间已经到了下1毫秒，由于自增序列没有重置为-1，那么这一毫秒只能生成一个ID，目前还没有想到好的处理办法**
+
+**注:** 我尝试在自增序列分配完毕之后将脚本阻塞1毫秒，但是因为TIME命令是REDIS_CMD_RANDOM属性的命令，而**当一个脚本执行了拥有REDIS_CMD_RANDOM属性的命令后，就不能执行拥有REDIS_CMD_WRITE属性的命令了**，所以下面的脚本并不能成功运行，权做参考
+
+	--根据当前时间生成主键key
+	local now = redis.call('TIME')
+	local sequence_key = 'id-generator-sequence' .. '-' .. now[1] .. '-' .. math.floor(now[2]/1000);
+	
+	local sequence
+	--如果自增序列大于最大的序列，说明当前毫秒的序列已经分配完毕，使用循环重试的方法直到时间跳到下一毫秒
+	repeat
+	      sequence = tonumber(redis.call('INCRBY', sequence_key, 1))
+	      if sequence > max_sequence then
+	              now = redis.call('TIME')
+	              sequence_key = 'id-generator-sequence' .. '-' .. now[1] .. '-' .. math.floor(now[2]/1000);
+	      end
+	until sequence <= max_sequence
+
+在并发量大时，可以使用批量的方式降低调用redis的损耗，代码与上面的代码基本一致，只是使用INCRBY来增长序列，并且在返回值返回start_sequence和end_sequence由调用方来生成对应的ID列表。
+
+	local num_ids = tonumber(ARGV[1]) --需要获取的ID数量
+	local end_sequence = redis.call('INCRBY', sequence_key, num_ids) --最大的序列
+	local start_sequence = end_sequence - num_ids + 1 --最小的序列
+	
+	if end_sequence >= max_sequence then
+	  --[[
+	  如果生成的序列大于最大的序列值，设置锁标识并设置过期时间为1毫秒
+	  --]]
+	  redis.log(redis.LOG_NOTICE, 'Rolling sequence back to the start, locking for 1ms.')
+	  redis.call('SET', sequence_key, '-1')
+	  redis.call('PSETEX', lock_key, 1, 'lock')
+	  end_sequence = max_sequence
+	end
+	
+	--将移位计算交给客户端实现
+	local current_time = redis.call('TIME')
+	return {
+	  start_sequence,
+	  end_sequence,
+	  logical_shard_id,
+	  tonumber(current_time[1]) * 1000 + math.floor(tonumber(current_time[2]) / 1000)
+	}
+
+当然上述的方法也存在问题：生成ID可能会不连续，中间会出现空洞。一次不能取太多的ID，否则会导致其他生成ID的请求失败。
 
 # instagram的方案
 instagram参考了flickr的方案，再结合twitter的经验，利用Postgres数据库的特性，实现了一个更简单可靠的ID生成服务。
 
-    使用41 bit来存放时间，精确到毫秒，可以使用41年。  
-    使用13 bit来存放逻辑分片ID。  
-    使用10 bit来存放自增长ID，意味着每台机器，每毫秒最多可以生成1024个ID  
+- 使用41 bit来存放时间，精确到毫秒，可以使用41年。  
+- 使用13 bit来存放逻辑分片ID。  
+- 使用10 bit来存放自增长ID，意味着每台机器，每毫秒最多可以生成1024个ID
+
+以instagram举的例子为说明：
+假定时间是September 9th, 2011, at 5:00pm，则毫秒数是1387263000（直接使用系统得到的从1970年开始的毫秒数）。那么先把时间数据放到ID里：
+id = 1387263000 << (64-41)
+
+再把分片ID放到时间里，假定用户ID是31341，有2000个逻辑分片，则分片ID是31341 % 2000 -> 1341：
+id |= 1341 << (64-41-13)
+
+最后，把自增序列放ID里，假定前一个序列是5000,则新的序列是5001：
+id |= (5001 % 1024)
+
+这样就得到了一个全局的分片ID。
+
+下面列出instagram使用的Postgres schema的sql：
+
+	REATE OR REPLACE FUNCTION insta5.next_id(OUT result bigint) AS $$  
+	DECLARE  
+	    our_epoch bigint := 1314220021721;  
+	    seq_id bigint;  
+	    now_millis bigint;  
+	    shard_id int := 5;  
+	BEGIN  
+	    SELECT nextval('insta5.table_id_seq') %% 1024 INTO seq_id;  
+	  
+	    SELECT FLOOR(EXTRACT(EPOCH FROM clock_timestamp()) * 1000) INTO now_millis;  
+	    result := (now_millis - our_epoch) << 23;  
+	    result := result | (shard_id << 10);  
+	    result := result | (seq_id);  
+	END;  
+	$$ LANGUAGE PLPGSQL;   
+
+则在插入新数据时，直接用类似下面的SQL即可（连请求生成ID的步骤都省略了！）： 
+
+	CREATE TABLE insta5.our_table (  
+	    "id" bigint NOT NULL DEFAULT insta5.next_id(),  
+	    ...rest of table schema...  
+	) 
+
+缺点：
+
+优点：
+
+- 充分把信息保存到ID里。
+- 充分利用数据库自身的机制，程序完全不用额外处理，直接插入到对应的分片的表即可。
+
+# 结合业务使用snowflake
+http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=403837240&idx=1&sn=ae9f2bf0cc5b0f68f9a2213485313127&mpshare=1&scene=23&srcid=1013Mv1Ub3adzOqb6QY7zZvG#rd
+
+借鉴snowflake的思想，结合各公司的业务逻辑和并发量，可以实现自己的分布式ID生成算法。
+举例，假设某公司ID生成器服务的需求如下：
+
+- 单机高峰并发量小于1W，预计未来5年单机高峰并发量小于10W
+- 有2个机房，预计未来5年机房数量小于4个
+- 每个机房机器数小于100台
+- 目前有5个业务线有ID生成需求，预计未来业务线数量小于10个
+
+分析过程如下：
+
+- 高位取从2016年1月1日到现在的毫秒数（假设系统ID生成器服务在这个时间之后上线），假设系统至少运行10年，那至少需要10年*365天*24小时*3600秒*1000毫秒=320*10^9，差不多预留39bit给毫秒数
+- 每秒的单机高峰并发量小于10W，即平均每毫秒的单机高峰并发量小于100，差不多预留7bit给每毫秒内序列号
+- 5年内机房数小于4个，预留2bit给机房标识
+- 每个机房小于100台机器，预留7bit给每个机房内的服务器标识
+- 业务线小于10个，预留4bit给业务线标识
+
+
+	0    00000.....000 0000 	00 		0000000		0.....0		0000000
+	|    |___________| |__| 	|_| 	|_____|		|_____| 	|_____|
+	|         |          |    	 |         | 		   |  		   |
+	1bit   39bit毫秒  4bit业务 2bit机房    7bit机器 	  预留      7bit序列 
+
+这样设计的64bit标识，可以保证：
+
+- 每个业务线、每个机房、每个机器生成的ID都是不同的
+- 同一个机器，每个毫秒内生成的ID都是不同的
+- 同一个机器，同一个毫秒内，以序列号区区分保证生成的ID是不同的
+- 将毫秒数放在最高位，保证生成的ID是趋势递增的

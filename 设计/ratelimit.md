@@ -952,10 +952,7 @@ Java代码
 	
 	--借助TIME 计算当前请求的时间
 	local current_time = redis.pcall('TIME')
-	local current_second = current_time[1]
-	local current_microsecond = current_time[2]
-	local current_millisecond = math.floor(tonumber(current_microsecond) / 1000)
-	local current_timestamp_ms = tonumber(current_second ... current_millisecond)
+	local current_timestamp_ms = tonumber(current_time[1]) * 1000 + math.floor(tonumber(current_time[2]) / 1000)
 	
 	
 	 --last_drip:上次请求的时间,content：剩余的令牌数量
@@ -966,7 +963,7 @@ Java代码
 	    current = {}
 	end
 	
-	--根据上次的时间戳与当前时间戳计算应该添加的令牌数
+	--计算从上次的时间戳与当前时间戳计算应该添加的令牌数
 	if current[1] then
 	    --上次请求的时间
 	    local last_drip = current[1]
