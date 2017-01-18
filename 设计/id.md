@@ -357,7 +357,14 @@ java代码
 
 上述的代码如果当前毫秒下的自增序列已经分配完毕，会返回一个错误信息给调用方，这就要求调用方捕获这个错误并作出相应的处理（重试或者抛出异常）。**而且自增序列增长到4094之后，即使时间已经到了下1毫秒，由于自增序列没有重置为-1，那么这一毫秒只能生成一个ID，目前还没有想到好的处理办法**
 
-**注:** 我尝试在自增序列分配完毕之后将脚本阻塞1毫秒，但是因为TIME命令是REDIS_CMD_RANDOM属性的命令，而**当一个脚本执行了拥有REDIS_CMD_RANDOM属性的命令后，就不能执行拥有REDIS_CMD_WRITE属性的命令了**，所以下面的脚本并不能成功运行，权做参考
+**注:**我尝试了两种处理方式都不是很理想：
+1.将自增序列每次都设为1毫秒过期
+
+	redis.call('PEXPIRE', sequence_key, 1)
+
+可能1毫秒的时间间隔很短，依然有很多请求的自增序列是从上一毫秒的序列开始自增的
+
+2.在自增序列分配完毕之后将脚本阻塞1毫秒
 
 	--根据当前时间生成主键key
 	local now = redis.call('TIME')
@@ -372,6 +379,8 @@ java代码
 	              sequence_key = 'id-generator-sequence' .. '-' .. now[1] .. '-' .. math.floor(now[2]/1000);
 	      end
 	until sequence <= max_sequence
+
+但是因为TIME命令是REDIS_CMD_RANDOM属性的命令，而**当一个脚本执行了拥有REDIS_CMD_RANDOM属性的命令后，就不能执行拥有REDIS_CMD_WRITE属性的命令了**，所以下面的脚本并不能成功运行，权做参考.**默认的LUA不支持取毫秒数，必须扩展lua才行，我不太喜欢这样做**。
 
 在并发量大时，可以使用批量的方式降低调用redis的损耗，代码与上面的代码基本一致，只是使用INCRBY来增长序列，并且在返回值返回start_sequence和end_sequence由调用方来生成对应的ID列表。
 
@@ -450,6 +459,8 @@ id |= (5001 % 1024)
 
 - 充分把信息保存到ID里。
 - 充分利用数据库自身的机制，程序完全不用额外处理，直接插入到对应的分片的表即可。
+
+**我尝试在MySQL下实现了一下，可能我对MySQL不是太熟，觉得实现太过复杂，中途放弃了**
 
 # 结合业务使用snowflake
 http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=403837240&idx=1&sn=ae9f2bf0cc5b0f68f9a2213485313127&mpshare=1&scene=23&srcid=1013Mv1Ub3adzOqb6QY7zZvG#rd

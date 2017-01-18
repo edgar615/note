@@ -3,6 +3,8 @@
 * [rpc](rpc.md)
 * [设计](设计/READMEmd)
   * [限流](设计/ratelimit.md)
+  * [主键](设计/id.md)
+  * [缓存](设计/cache.md)
 * [微服务](微服务/READMEmd)
   * [同步和异步](微服务/同步和异步.md)
 * [Vert.x](vertx/README.md)
