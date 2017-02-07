@@ -5,6 +5,8 @@
   * [限流](设计/ratelimit.md)
   * [主键](设计/id.md)
   * [缓存](设计/cache.md)
+  * [两阶段提交](设计/2pc.md)
+  * [Paxos](设计/Paxos.md)
 * [微服务](微服务/READMEmd)
   * [同步和异步](微服务/同步和异步.md)
 * [Vert.x](vertx/README.md)
