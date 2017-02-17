@@ -147,3 +147,119 @@ jmap -histo:live 这个命令执行，JVM会先触发gc，然后再统计信息�
 5.也可以使用 jmap -dump:format=b,file=<fileName>命令将堆信息保存到一个文件中，再借助jhat命令查看详细内容
 
 6.在内存出现泄露、溢出或者其它前提条件下，建议多dump几次内存，把内存文件进行编号归档，便于后续内存整理分析。
+
+示例：
+
+应用刚启动时：
+
+	[root@ihorn-dev]# jmap -heap 18298
+	Attaching to process ID 18298, please wait...
+	Debugger attached successfully.
+	Server compiler detected.
+	JVM version is 25.20-b23
+	
+	using thread-local object allocation.
+	Parallel GC with 4 thread(s)
+	
+	Heap Configuration:
+	   MinHeapFreeRatio         = 0
+	   MaxHeapFreeRatio         = 100
+	   MaxHeapSize              = 104857600 (100.0MB)
+	   NewSize                  = 52428800 (50.0MB)
+	   MaxNewSize               = 52428800 (50.0MB)
+	   OldSize                  = 52428800 (50.0MB)
+	   NewRatio                 = 1
+	   SurvivorRatio            = 8
+	   MetaspaceSize            = 21807104 (20.796875MB)
+	   CompressedClassSpaceSize = 1073741824 (1024.0MB)
+	   MaxMetaspaceSize         = 17592186044415 MB
+	   G1HeapRegionSize         = 0 (0.0MB)
+	
+	Heap Usage:
+	PS Young Generation
+	Eden Space:
+	   capacity = 31981568 (30.5MB)
+	   used     = 12845048 (12.249992370605469MB)
+	   free     = 19136520 (18.25000762939453MB)
+	   40.16390941182121% used
+	From Space:
+	   capacity = 10485760 (10.0MB)
+	   used     = 1634392 (1.5586776733398438MB)
+	   free     = 8851368 (8.441322326660156MB)
+	   15.586776733398438% used
+	To Space:
+	   capacity = 9961472 (9.5MB)
+	   used     = 0 (0.0MB)
+	   free     = 9961472 (9.5MB)
+	   0.0% used
+	PS Old Generation
+	   capacity = 52428800 (50.0MB)
+	   used     = 7901552 (7.5355072021484375MB)
+	   free     = 44527248 (42.46449279785156MB)
+	   15.071014404296875% used
+	
+	9369 interned Strings occupying 805784 bytes.
+
+隔一段时间之后，已经执行了254次YONG GC
+
+	 S0C    S1C    S0U    S1U      EC       EU        OC         OU       MC     MU    CCSC   CCSU   YGC     YGCT    FGC    FGCT     GCT   
+	512.0  512.0   0.0   224.0  50176.0  49145.4   51200.0    11315.0   30848.0 29593.4 3712.0 3458.7    251    0.559   1      0.049    0.608
+	512.0  512.0  256.0   0.0   50176.0  14884.8   51200.0    11323.0   30848.0 29593.4 3712.0 3458.7    252    0.561   1      0.049    0.610
+	512.0  512.0  256.0   0.0   50176.0  29782.1   51200.0    11323.0   30848.0 29593.4 3712.0 3458.7    252    0.561   1      0.049    0.610
+	512.0  512.0  256.0   0.0   50176.0  44732.8   51200.0    11323.0   30848.0 29593.4 3712.0 3458.7    252    0.561   1      0.049    0.610
+	512.0  512.0   0.0   256.0  50176.0  10043.6   51200.0    11323.0   30848.0 29593.4 3712.0 3458.7    253    0.563   1      0.049    0.611
+	512.0  512.0   0.0   256.0  50176.0  25095.5   51200.0    11323.0   30848.0 29593.4 3712.0 3458.7    253    0.563   1      0.049    0.611
+	512.0  512.0   0.0   256.0  50176.0  40201.4   51200.0    11323.0   30848.0 29593.4 3712.0 3458.7    253    0.563   1      0.049    0.611
+	512.0  512.0  256.0   0.0   50176.0   6033.2   51200.0    11323.0   30848.0 29593.4 3712.0 3458.7    254    0.565   1      0.049    0.613
+	512.0  512.0  256.0   0.0   50176.0  21144.4   51200.0    11323.0   30848.0 29593.4 3712.0 3458.7    254    0.565   1      0.049    0.613
+	512.0  512.0  256.0   0.0   50176.0  36276.1   51200.0    11323.0   30848.0 29593.4 3712.0 3458.7    254    0.565   1      0.049    0.613
+
+在查看堆的详情
+
+	[root@ihorn-dev]# jmap -heap 18298
+	Attaching to process ID 18298, please wait...
+	Debugger attached successfully.
+	Server compiler detected.
+	JVM version is 25.20-b23
+	
+	using thread-local object allocation.
+	Parallel GC with 4 thread(s)
+	
+	Heap Configuration:
+	   MinHeapFreeRatio         = 0
+	   MaxHeapFreeRatio         = 100
+	   MaxHeapSize              = 104857600 (100.0MB)
+	   NewSize                  = 52428800 (50.0MB)
+	   MaxNewSize               = 52428800 (50.0MB)
+	   OldSize                  = 52428800 (50.0MB)
+	   NewRatio                 = 1
+	   SurvivorRatio            = 8
+	   MetaspaceSize            = 21807104 (20.796875MB)
+	   CompressedClassSpaceSize = 1073741824 (1024.0MB)
+	   MaxMetaspaceSize         = 17592186044415 MB
+	   G1HeapRegionSize         = 0 (0.0MB)
+	
+	Heap Usage:
+	PS Young Generation
+	Eden Space:
+	   capacity = 51380224 (49.0MB)
+	   used     = 16426712 (15.665733337402344MB)
+	   free     = 34953512 (33.334266662597656MB)
+	   31.9708843620456% used
+	From Space:
+	   capacity = 524288 (0.5MB)
+	   used     = 327680 (0.3125MB)
+	   free     = 196608 (0.1875MB)
+	   62.5% used
+	To Space:
+	   capacity = 524288 (0.5MB)
+	   used     = 0 (0.0MB)
+	   free     = 524288 (0.5MB)
+	   0.0% used
+	PS Old Generation
+	   capacity = 52428800 (50.0MB)
+	   used     = 11455528 (10.924842834472656MB)
+	   free     = 40973272 (39.075157165527344MB)
+	   21.849685668945312% used
+	
+	10131 interned Strings occupying 895216 bytes.
