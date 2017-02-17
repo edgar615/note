@@ -1046,6 +1046,18 @@ getBackend主要送从classpath中读取对应的ServiceDiscoveryBackend对象�
 	    this.registry = new AsyncMap<>(vertx, "service.registry");
 	  }
 
+AsyncMap的构造方法会判断节点是否在集群模式下，如果在集群模式下会使用clusterManager提供的分布式MAP，否则使用一个本地MAP.(LocalMapWrapper是借助ConcurrentMap对map的一个简单封装)
+
+	  public AsyncMap(Vertx vertx, String name) {
+	    this.vertx = vertx;
+	    ClusterManager clusterManager = ((VertxInternal) vertx).getClusterManager();
+	    if (clusterManager == null) {
+	      syncMap = new LocalMapWrapper<>(vertx.sharedData().<K, V>getLocalMap(name));
+	    } else {
+	      syncMap = clusterManager.getSyncMap(name);
+	    }
+	  }
+
 **store方法**
 为每个服务记录生成一个唯一ID，**只有ID为null的服务记录才表示未被发布**
 
