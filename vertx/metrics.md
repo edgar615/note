@@ -9,6 +9,8 @@ Vert.x提供了metric组件，用于收集应用的各种指标
     Vertx.vertx(new VertxOptions()
                         .setMetricsOptions(new MetricsOptions().setEnabled(true)))
 
+MetricsOptions可以接受一个JSON对象作为参数，用于扩展MetricsOptions未提供的属性但是DropwizardMetricsOptions却提供的属性，例如registryName、jmxEnabled等
+
 也可以在启动时通过命令行参数控制
 
 	java -jar your-fat-jar -Dvertx.metrics.options.enabled=true
@@ -41,6 +43,11 @@ getMetricsSnapshot可以通过每个度量指标的名称搜索。`service.getMe
       for (String metricsName : metricsNames) {
         System.out.println("Known metrics name " + metricsName);
       }
+
+## 获取Dropwizard Registry
+如果指定了registryName,就可以通过下面的方法获取到registry
+
+	MetricRegistry registry = SharedMetricRegistries.getOrCreate("my-registry");
 
 # 实现
 Dropwizard/metrics提供了下列几种指标
@@ -336,6 +343,8 @@ metrics方法首先会创建一个 MetricRegistry用于存放所有的指标数�
 	    shutdown = false;
 	  }
 	}
+
+SharedMetricRegistries内部使用了一个MAP来存放registry对象，这样可以通过registryName获得对应的registry对象
 
 接着会创建一个VertxMetrics对象
 
