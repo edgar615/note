@@ -385,6 +385,17 @@ AuthProvider用来校验web请求的权限
 Procedure的check方法用于检查应用的健康状态
 
 ## DefaultProcedure
+它有三个属性
+
+	  private final Handler<Future<Status>> handler;
+	  private final String name;
+	  private final long timeout;
+
+- name 名称
+- timeout 超时时间
+- handler 健康检查的函数
+
+check函数的实现
 
 	  @Override
 	  public void check(Handler<JsonObject> resultHandler) {
@@ -411,3 +422,42 @@ Procedure的check方法用于检查应用的健康状态
 	      future.fail(new ProcedureException(e));
 	    }
 	  }
+	  
+它主要分为三个部分
+
+第一部分. 执行健康检查的函数
+
+	    try {
+	      handler.handle(future);
+	    } catch (Exception e) {
+	      future.fail(new ProcedureException(e));
+	    }
+
+handler就是在注册健康检查时声明的procedure
+
+    hc.register("my-procedure", future -> future.complete(Status.OK()));
+    
+procedure将future标记为成功或失败，会触发future标记的回调函数（第二部分）
+
+	    Future<Status> future = Future.<Status>future()
+	      .setHandler(ar -> {
+		if (ar.cause() instanceof ProcedureException) {
+		  resultHandler.handle(StatusHelper.onError(name, (ProcedureException) ar.cause()));
+		} else {
+		  resultHandler.handle(StatusHelper.from(name, ar));
+		}
+	      });
+	      
+这个回调函数的就是将检查结果作为httph或者eventbus的响应输出
+
+第三部分. 超时检查，如果future在规定对时间仍未完成，则会将future设置为失败(超时)
+
+	    if (timeout >= 0) {
+	      vertx.setTimer(timeout, l -> {
+		if (!future.isComplete()) {
+		  future.fail(new ProcedureException("Timeout"));
+		}
+	      });
+	    }
+
+## CompositeProcedure
