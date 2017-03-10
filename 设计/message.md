@@ -47,10 +47,6 @@
 <td>消息id，唯一</td>
 </tr>
 <tr>
-<td>id</td>
-<td>消息id，唯一</td>
-</tr>
-<tr>
 <td>timestamp</td>
 <td>消息产生时间戳</td>
 </tr>
@@ -75,7 +71,7 @@
 消息内容为JSON格式文本，如果消息中存在二进制数据需要进行base64编码为文本串。消息体的编码格式为UTF-8，对于不同的action，消息内容格式不同。
 
 ## 消息 message
-单向消息，不予接收方（或者是消息订阅方）回应
+单向消息，不需要接收方（或者是消息订阅方）回应
 
 <table>
 <tr>
@@ -106,16 +102,18 @@
 <td>资源标识（字符串），唯一</td>
 </tr>
 <tr>
-<td>content</td>
-<td>请求参数（JSON对象）</td>
-</tr>
-<tr>
 <td>operation</td>
 <td>操作类型</td>
 </tr>
+<tr>
+<td>content</td>
+<td>请求参数（JSON对象）</td>
+</tr>
 </table>
 
-其中operation也可以定义不同的类型
+request可以用来实现RPC调用，用resource表示接口，用operation表示方法，用content表示参数。
+
+**其中operation也可以定义不同的类型，仅供参考，目前并未按照该表格实现**
 
 <table>
 <tr>
@@ -160,7 +158,6 @@
 </tr>
 </table>
 
-**request和response可以用来实现远程RPC调用。**例如将resource与接口建立对应关系，将operation设置为方法名，content用来存放参数
 
 ## 请求回应 response
 请求回应为请求消息的回应
