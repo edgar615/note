@@ -612,7 +612,7 @@ Vert.x还定义了一种unknown类型的服务类型，但这种类型无法获�
 ## 自定义bridge
 Vert.x官方的Zookeeper桥接尚未正式发布，下面是参考Consul实现的zookeeper桥接
 
-1. 创建一个辅助类，维护了Record和服务ID之间的关系，并且封装了服务的发布和注销方法
+创建一个辅助类，维护了Record和服务ID之间的关系，并且封装了服务的发布和注销方法
 
 	public class ImportedZookeeperService {
 	
