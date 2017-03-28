@@ -2,7 +2,9 @@ http://blog.jobbole.com/83439/
 
 https://segmentfault.com/a/1190000005886009
 
-http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=404087915&idx=1&sn=075664193f334874a3fc87fd4f712ebc&mpshare=1&scene=23&srcid=1013nFtafpDeYoP8G8hm4iqs#rd​
+http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=404087915&idx=1&sn=075664193f334874a3fc87fd4f712ebc&mpshare=1&scene=23&srcid=1013nFtafpDeYoP8G8hm4iqs#rd
+
+http://tech.meituan.com/cache_about.html​
 
 # 缓存算法
 

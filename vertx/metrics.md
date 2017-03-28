@@ -24,6 +24,23 @@ java -jar your-fat-jar -Dvertx.metrics.options.enabled=true -Dvertx.metrics.opti
 
 	java -ja	r your-fat-jar -Dvertx.metrics.options.enabled=true -Dvertx.metrics.options.jmxEnabled=true
 
+也可以直接通过`vertx.metrics.options.configPath`属性来制定metrics的配置文件
+
+	{
+	  "enabled" : true,
+	  "register-name" : "my-register",
+	  "monitoredHttpServerUris" : [
+	    {
+	      "value" : "/login",
+	      "type" : "EQUALS"
+	    }
+	  ]
+	}
+
+	java -jar your-fat-jar -Dvertx.metrics.options.enabled=true -Dvertx.metrics.options.configPath=\conf\metrics.json
+
+**使用`-Dvertx.metrics.options.configPath`的时候，一定要同时使用-Dvertx.metrics.options.enabled=true开启metrics，不然configPath不会有任何作用**
+
 **创建MetricsService**
 
 	MetricsService service = MetricsService.create(vertx);
@@ -752,6 +769,16 @@ ThroughputMeter
 - responses-4xx 响应码是4xx的Throughput Timer
 - responses-5xx 响应码是5xx的Throughput Timer
 
+**<http-method>-requests./<uri> 需要使用addMonitoredHttpServerUri方法设置匹配规则才起作用**
+
+	Vertx vertx = Vertx.vertx(new VertxOptions().setMetricsOptions(
+	    new DropwizardMetricsOptions().
+	        setEnabled(true).
+	        addMonitoredHttpServerUri(
+	            new Match().setValue("/")).
+	        addMonitoredHttpServerUri(
+	            new Match().setValue("/foo/.*").setType(MatchType.REGEX))
+	));
 
 在请求处理完成之后responseComplete方法会更新度量指标值
 
