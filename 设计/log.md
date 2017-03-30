@@ -96,3 +96,21 @@
 示例
 
 	  <====== [8eea6dc7-17d5-4ce8-a36d-f8a9a3514b6a] [MESSAGE] [user-1ddd54a] [user.insert] [header{from=user-12, to=user-1ddd54a, group=user, action=MESSAGE, id=8eea6dc7-17d5-4ce8-a36d-f8a9a3514b6a, timestamp=1489650972, sequence=null}] [Message{content={foo=bar}, resource=user.insert, caption=insert, description=null}]
+
+## ===> 表示eventbus接收到的消息
+
+	===> [消息ID] [消息地址] [消息头，用;分隔，无消息头输出no header] [消息体，无消息体输出no body]
+
+示例
+
+	===> [2671b4f1-e6e1-49e3-a41b-c1429b4f7ab2] [direwolves.eb.api.get] [no header] [{"name":"FEpRaRdKjn"}]
+
+## <=== 表示eventbus向发送方回应消息
+### HTTP格式
+
+	<=== [消息ID] [OK|FAILED] [耗时] [响应字节数,成功的消息才有] [异常描述，失败的消息才有]
+
+示例
+
+	<=== [be5a9599-5936-45e5-811f-fc4626cb3c5f] [OK] [17ms] [166 bytes]
+	<===  [2375af3a-397d-476b-9682-db5325600a14] [FAILED] [13ms] [Resources Not Found]
