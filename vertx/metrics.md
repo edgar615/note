@@ -28,7 +28,7 @@ java -jar your-fat-jar -Dvertx.metrics.options.enabled=true -Dvertx.metrics.opti
 
 	{
 	  "enabled" : true,
-	  "register-name" : "my-register",
+	  "registerName" : "my-register",
 	  "monitoredHttpServerUris" : [
 	    {
 	      "value" : "/login",
@@ -362,6 +362,7 @@ metrics方法首先会创建一个 MetricRegistry用于存放所有的指标数�
 	}
 
 SharedMetricRegistries内部使用了一个MAP来存放registry对象，这样可以通过registryName获得对应的registry对象
+**必须使用`-Dvertx.metrics.options.registryName=my-registry`指明register的名称，configPath中的registerName不会有任何作用**
 
 接着会创建一个VertxMetrics对象
 
