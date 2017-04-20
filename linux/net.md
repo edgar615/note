@@ -53,7 +53,7 @@ dhcp表示使用DHCP分配IP
 	iface eth0 inet static
 	address 10.4.7.14
 	netmask 255.255.255.0
-	gateway 192.4.0.1
+	gateway 10.4.0.1
 
 
 2. 手动设置DNS服务器：# vim /etc/resolv.conf
@@ -67,13 +67,13 @@ dhcp表示使用DHCP分配IP
 注意：重启Ubuntu后发现又不能上网了，问题出在/etc/resolv.conf。重启后，此文件配置的dns又被自动修改为默认值。所以需要永久性修改DNS。方法如下：
 
 	# vim /etc/resolvconf/resolv.conf.d/base
-	nameserver 192.168.80.2
+	nameserver 10.4.0.1
 	nameserver 8.8.8.8
 
 或者
 
 	# vim /etc/resolvconf/resolv.conf.d/tail
-	nameserver 192.168.80.2
+	nameserver 10.4.0.1
 	nameserver 8.8.8.8
 
 3).重启networking服务使其生效
