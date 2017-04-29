@@ -49,6 +49,7 @@ https://github.com/bolasblack/http-api-guide#user-content-http-%E5%8D%8F%E8%AE%A
 - 428 Precondition Required : 要求先决条件，如果想要请求能成功必须满足一些预设的条件
 
 服务端错误
+
 - 500 Internal Server Error : 服务器遇到了一个未曾预料的状况，导致了它无法完成对请求的处理。
 - 501 Not Implemented : 服务器不支持当前请求所需要的某个功能。
 - 502 Bad Gateway : 作为网关或者代理工作的服务器尝试执行请求时，从上游服务器接收到无效的响应。
@@ -118,3 +119,61 @@ https://zh.wikipedia.org/wiki/ISO_8601
 x-request-id : 1eda8723-5b94-48e5-bb35-ecd7b10490c3
 x-response-time : 15ms
 x-server-time: 2017-04-27T18:19:28+08:00
+
+# 参数
+许多API都有一些可选参数。对于GET请求，在路径中未包含的参数都可以作为HTTP查询字符串参数传递：
+
+	curl -i "https://api.github.com/repos/vmg/redcarpet/issues?state=closed"
+
+对于POST, PATCH, PUT, 和DELETE请求，URL中不包含的参数应该被编码为JSON，通过请求体传递，请求头的Content-Type 应该指定为 'application/json':
+
+	curl -i -u username -d '{"scopes":["public_repo"]}' https://api.github.com/authorizations
+
+
+# 查询
+## 参数
+<table>
+<tr>
+<th>名称</th>
+<th>类型</th>
+<th>描述</th>
+</tr>
+<tr>
+<td>q</td>
+<td>string</td>
+<td>查询条件</td>
+</tr>
+<tr>
+<td>sort</td>
+<td>string</td>
+<td>排序字段</td>
+</tr>
+<tr>
+<td>order</td>
+<td>string</td>
+<td>排序顺序，默认值desc</td>
+</tr>
+</table>
+
+## 查询条件q的格式
+
+- foo:bar foo=bar的条件
+- stars>10 
+- stars:>=10
+- created:>=2012-04-30
+- created:>2012-04-29
+- stars:"10 .. *"
+- created:"2012-04-30 .. * "
+- stars:"10 .. 50"
+- created:"2012-04-30 .. 2012-07-04"
+- stars:"<10"
+- stars:"<= 9"
+- created:<2012-07-05
+- created:<=2012-07-04
+- stars:"* .. 10"
+- created:"* .. 2012-04-30"
+- stars:"1 .. 10"
+- created:"2012-04-30 .. 2012-07-04"
+- -language:javascript
+
+多个条件用+组合
