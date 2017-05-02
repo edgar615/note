@@ -1,7 +1,9 @@
 参考github的API设计的Rest API文档，公司所有的API都应该遵循这个方案
 
 https://developer.github.com/v3
+http://www.vinaysahni.com/best-practices-for-a-pragmatic-restful-api
 https://github.com/bolasblack/http-api-guide#user-content-http-%E5%8D%8F%E8%AE%AE
+
 
 # HTTP动词
 
@@ -110,9 +112,29 @@ https://zh.wikipedia.org/wiki/ISO_8601
 
 如以1年2个月为循环间隔，无限次循环，最后循环终止于2025年1月1日，可表示为R/P1Y2M/20250101
 
-# 分页
+# API版本
+http://stackoverflow.com/questions/389169/best-practices-for-api-versioning
+
+应该将API的版本号放入URL。
+
+	https://api.example.com/v{n}/
+
+采用多版本并存，增量发布的方式
+v{n} n代表版本号,分为整形和浮点型
+整形的版本号: 大功能版本发布形式；具有当前版本状态下的所有API接口 ,例如：v1,v2
+浮点型：为小版本号，只具备补充api的功能，其他api都默认调用对应大版本号的api 例如：v1.1 v2.2
+
 
 # 限流
+
+
+    X-Rate-Limit-Limit - The number of allowed requests in the current period
+    X-Rate-Limit-Remaining - The number of remaining requests in the current period
+    X-Rate-Limit-Reset - The number of seconds left in the current period
+
+不要用时间戳来表示X-Rate-Limit-Reset，因为时间戳包含各种有用但不必要的信息，例如日期和时区。API调用方只是想知道什么时候他们可以再次发送请求，使用秒数来回答这个问题，可以让调用方以最小的代价来处理。它也避免了时钟歪斜的问题。
+
+
 
 # 响应头
 
@@ -130,35 +152,30 @@ x-server-time: 2017-04-27T18:19:28+08:00
 	curl -i -u username -d '{"scopes":["public_repo"]}' https://api.github.com/authorizations
 
 
-# 查询
-## 参数
-<table>
-<tr>
-<th>名称</th>
-<th>类型</th>
-<th>描述</th>
-</tr>
-<tr>
-<td>q</td>
-<td>string</td>
-<td>查询条件</td>
-</tr>
-<tr>
-<td>sort</td>
-<td>string</td>
-<td>排序字段</td>
-</tr>
-<tr>
-<td>order</td>
-<td>string</td>
-<td>排序顺序，默认值desc</td>
-</tr>
-</table>
+# 结果过滤、排序和搜索
+
+## 过滤
+为实现过滤的每个字段使用唯一的查询参数。
+
+/tickets?state=open. state是一个实现了过滤条件的查询参数
+
+## 排序
+sort的查询参数用来描述排序规则，多个排序规则使用逗号**,**分隔，每个排序规则都可以使用一个**-**表示降序的排序顺序
+
+**GET /tickets?sort=-priority** 按priority降序
+
+**GET /tickets?sort=-priority,created_at**按priority降序，created_at生序
+
+## 搜索
+
+有时基本的过滤器是不够的，这时需要使用全文搜索来检索特定资源。
+
+q的查询参数用来描述搜索条件
 
 ## 查询条件q的格式
 
 - foo:bar foo=bar的条件
-- stars>10 
+- stars:>10 
 - stars:>=10
 - created:>=2012-04-30
 - created:>2012-04-29
@@ -177,3 +194,44 @@ x-server-time: 2017-04-27T18:19:28+08:00
 - -language:javascript
 
 多个条件用+组合
+
+## 限制API返回的字段
+
+API的调用方并不是总是需要资源的完全表示。所以增加选择返回字段的参数可以让API调用方减少网络流量，并提高API的响应。
+
+fields的查询参数用来描述需要返回的字段，多个字段用逗号**,**分隔
+
+GET /tickets?fields=id,subject,customer_name,updated_at&state=open&sort=-updated_at
+
+
+## 分页
+
+start的查询参数用来表示数据的起始位置
+limit的查询参数用来表示返回的数量
+
+## 总数
+如果API的调用方需要得到资源的总数，可以使用**count=true**的查询参数
+资源的总数将会通过**Total-Count**的响应头显示，响应体的内容可能是全部资源的部分数据
+
+
+	GET /api/v1/tickets?count=true
+	
+	200 OK
+	Total-Count: 135
+	
+	[
+	  ... results ... 
+	]
+
+
+# 缓存
+
+Caching
+
+HTTP provides a built-in caching framework! All you have to do is include some additional outbound response headers and do a little validation when you receive some inbound request headers.
+
+There are 2 approaches: ETag and Last-Modified
+
+ETag: When generating a response, include a HTTP header ETag containing a hash or checksum of the representation. This value should change whenever the output representation changes. Now, if an inbound HTTP requests contains a If-None-Match header with a matching ETag value, the API should return a 304 Not Modified status code instead of the output representation of the resource.
+
+Last-Modified: This basically works like to ETag, except that it uses timestamps. The response header Last-Modified contains a timestamp in RFC 1123 format which is validated against If-Modified-Since. Note that the HTTP spec has had 3 different acceptable date formats and the server should be prepared to accept any one of them.
