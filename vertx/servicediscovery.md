@@ -1046,7 +1046,7 @@ getBackend主要送从classpath中读取对应的ServiceDiscoveryBackend对象�
 	    this.registry = new AsyncMap<>(vertx, "service.registry");
 	  }
 
-AsyncMap的构造方法会判断节点是否在集群模式下，如果在集群模式下会使用clusterManager提供的分布式MAP，否则使用一个本地MAP.(LocalMapWrapper是借助ConcurrentMap对map的一个简单封装)
+AsyncMap的构造方法会判断节点是否在集群模式下，如果在集群模式下会使用clusterManager提供的分布式MAP，否则使用一个本地MAP(多个ServiceDiscovery共享同一个map).(LocalMapWrapper是借助ConcurrentMap对map的一个简单封装)
 
 	  public AsyncMap(Vertx vertx, String name) {
 	    this.vertx = vertx;
