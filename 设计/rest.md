@@ -175,25 +175,28 @@ q的查询参数用来描述搜索条件
 ## 查询条件q的格式
 
 - foo:bar foo=bar的条件
-- stars:>10 
-- stars:>=10
+- foo:"bar" foo="bar"的条件
+- stars:>10 stars > 10的条件
 - created:>=2012-04-30
 - created:>2012-04-29
-- stars:"10 .. *"
-- created:"2012-04-30 .. * "
-- stars:"10 .. 50"
-- created:"2012-04-30 .. 2012-07-04"
-- stars:"<10"
-- stars:"<= 9"
+- stars:10..* stars >= 10的条件
+- created:2012-04-30..*
+- stars:10..50
+- created:2012-04-30..2012-07-04
+- stars:<10
+- stars:<=9
 - created:<2012-07-05
 - created:<=2012-07-04
-- stars:"* .. 10"
-- created:"* .. 2012-04-30"
-- stars:"1 .. 10"
-- created:"2012-04-30 .. 2012-07-04"
-- -language:javascript
+- stars:* ..10
+- created:*..2012-04-30
+- stars:1..10
+- created:2012-04-30..2012-07-04
+- -language:javascript language !=javascript的条件
+- foo:^bar 以bar开头的条件
+- foo:bar$ 以bar结尾的条件
 
-多个条件用+组合
+多个条件用空格组合，URL编码后为+，
+根据上面的规则，空格、> >= < <= .. * ^ $属于系统字符，不应该出现在查询参数或者查询条件中
 
 ## 限制API返回的字段
 
