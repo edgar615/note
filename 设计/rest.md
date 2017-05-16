@@ -191,9 +191,10 @@ q的查询参数用来描述搜索条件
 - created:*..2012-04-30
 - stars:1..10
 - created:2012-04-30..2012-07-04
-- -language:javascript language !=javascript的条件
-- foo:^bar 以bar开头的条件
-- foo:bar$ 以bar结尾的条件
+- foo:*bar 以bar开头的条件
+- foo:bar* 以bar结尾的条件
+- foo:*bar* 包含bar的条件
+-language:javascript 取反language !=javascript的条件 -created:<=2012-07-04表示created>2012-07-04，foo:*bar、foo:bar*、foo:*bar*暂时不支持取反
 
 多个条件用空格组合，URL编码后为+，
 根据上面的规则，空格、> >= < <= .. * ^ $属于系统字符，不应该出现在查询参数或者查询条件中
