@@ -100,4 +100,4 @@
 通过上面的图，我们最终找到了罪魁祸首KafkaEventConsumer里的process变量（这是一个map：`Map<TopicPartition, TreeSet<RecordFuture>> process = new HashMap<>()`）里面key=DeviceControlEvent_1_3对应的TreeSet长期持有了对象未释放。
 
 
-最终查找代码和环境，是因为有一个同事用了一个模拟程序以1ms一条的速度发送某个特定事件，超出了应用的处理速度，导致队列挤压
+最终查找代码和环境，是因为有一个同事用了一个模拟程序以1ms一条的速度发送某个特定事件，超出了应用的处理速度，导致队列挤压.对消息的消费增加了限流、黑名单的逻辑后在没有出现过FULL GC
