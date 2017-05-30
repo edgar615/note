@@ -519,6 +519,8 @@ https://redis.io/commands/INCR#pattern-rate-limiter
 
 https://www.binpress.com/tutorial/introduction-to-rate-limiting-with-redis/155
 
+http://www.binpress.com/tutorial/introduction-to-rate-limiting-with-redis-part-2/166
+
 http://vinoyang.com/2015/08/23/redis-incr-implement-rate-limit/
 
 redis官网介绍了用incr命令实现RateLimit的两种方法
@@ -543,7 +545,7 @@ redis官网介绍了用incr命令实现RateLimit的两种方法
 
 需要注意的是，这里我们使用multi和exec命令来确保对每个API调用既执行了incr也同时能够执行expire命令。
 
-    multi命令用于标识一个命令集被包含在一个事务块中，exec保证该事务块命令集执行的原子性。
+	multi命令用于标识一个命令集被包含在一个事务块中，exec保证该事务块命令集执行的原子性。
 
 ## 模式2
 
@@ -551,17 +553,17 @@ redis官网介绍了用incr命令实现RateLimit的两种方法
 
 ### 单一计数器
 
-FUNCTION LIMIT_API_CALL(ip):
-current = GET(ip)
-IF current != NULL AND current > 10 THEN
-    ERROR "too many requests per second"
-ELSE
-    value = INCR(ip)
-    IF value == 1 THEN
-        EXPIRE(value,1)
-    END
-    PERFORM_API_CALL()
-END
+	FUNCTION LIMIT_API_CALL(ip):
+	current = GET(ip)
+	IF current != NULL AND current > 10 THEN
+	    ERROR "too many requests per second"
+	ELSE
+	    value = INCR(ip)
+	    IF value == 1 THEN
+		EXPIRE(value,1)
+	    END
+	    PERFORM_API_CALL()
+	END
 
 该计数器在当前秒内第一次请求被执行时创建，但它只能存活一秒。如果在当前秒内，发送超过10次请求，那么该计数器将超过10。否则它将失效并从0开始重新计数。
 
@@ -1000,3 +1002,7 @@ Java代码
 # nginx接入层限流
 工作中没涉及到
 参考 http://jinnianshilongnian.iteye.com/blog/2305117
+
+# 补充
+https://stripe.com/blog/rate-limiters
+
