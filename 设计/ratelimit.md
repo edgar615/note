@@ -523,6 +523,8 @@ http://www.binpress.com/tutorial/introduction-to-rate-limiting-with-redis-part-2
 
 http://vinoyang.com/2015/08/23/redis-incr-implement-rate-limit/
 
+https://blog.figma.com/an-alternative-approach-to-rate-limiting-f8a06cf7c94c
+
 redis官网介绍了用incr命令实现RateLimit的两种方法
 
 ## 模式1
@@ -601,7 +603,7 @@ redis官网介绍了用incr命令实现RateLimit的两种方法
 
     这里产生race condition不会有大问题的原因在于，else分支使用的rpushx，它不会导致if not than init的问题，并且expire命令将在创建list的时候以原子的形式捆绑执行。不会产生key泄漏，导致永不失效的情况产生。
 
-
+# Fixed window counters
 ## 示例
 
 lua脚本
@@ -655,12 +657,83 @@ java代码
 	true
 	false
 
+## 完整示例1：单个限流规则
+
+	local key = "rate.limit." .. ARGV[1] --限流KEY
+	local limit = tonumber(ARGV[2]) --限流窗口允许的最大请求数
+	local interval = ARGV[3] --限流间隔,毫秒
+	local now = ARGV[4] --当前毫秒数
+	--计算key
+	local subject = math.floor(now / interval)
+	key = key .. "." ..subject;
+	
+	local current = tonumber(redis.call("incr", key))
+	if current == 1 then
+	    redis.call("expire", key, interval)
+	end
+	
+	local ttl = redis.call("ttl", key)
+	local remaining = math.max(limit - current, 0);
+	--返回值一次为：是否通过0或1，最大请求数，剩余令牌,请求时间，限流窗口重置时间
+	return {limit - current >= 0, limit, remaining, ttl}
+
+## 完整示例2：多个限流规则组合
+
+	local rate_limits = cjson.decode(ARGV[1])
+	local now = tonumber(ARGV[2])
+	
+	local prefix_key = "rate.limit." --限流KEY
+	local result = {}
+	local passed = true;
+	--计算请求是否满足每个限流规则
+	for i, rate_limit in ipairs(rate_limits) do
+	    local limit = rate_limit[2]
+	    local interval = rate_limit[3]
+	    local limit_key = prefix_key .. rate_limit[1] .. "." .. math.floor(now / interval)
+	
+	    local requested_num = tonumber(redis.call('GET', limit_key)) or 0 --请求数，默认为0
+	    if requested_num >= limit then
+	        passed = false
+	        table.insert(result, { limit_key, limit, interval,  math.max(limit - requested_num, 0), 0})
+	    else
+	        table.insert(result, { limit_key, limit, interval,  math.max(limit - requested_num, 0), 1 })
+	    end
+	end
+	
+	--如果通过，将所有的限流请求数加1，并返回第一个限流的规则
+	if passed then
+	    for key,value in ipairs(result) do
+	        local limit_key = value[1]
+	        local limit = value[2]
+	        local interval = value[3]
+	        local current = tonumber(redis.call("incr", limit_key))
+	        if current == 1 then
+	            redis.call("expire", limit_key, interval)
+	        end
+	        local ttl = redis.call("ttl", limit_key)
+	        table.insert(value,  math.max(limit - current, 0))
+	        table.insert(value, ttl)
+	    end
+	    return {1, result[1][2], result[1][6], result[1][7]}
+	end
+	
+	--如果未通过，返回第一个没通过的限流规则
+	for key,value in ipairs(result) do
+	    local pass = value[5]
+	    local limit_key = value[1]
+	    if not pass or pass == 0 then
+	        local ttl = redis.call("ttl", limit_key)
+	        return {0, value[2], 0, ttl}
+	    end
+	end
+	return redis.error_reply('ratelimt error.')
+
 # 时间边界问题
 上述Redis的实现在实际应用中存在本篇最开始时候描述的问题**“没有很好的处理单位时间的边界”**。假如一个接口每小时值允许240次调用。如果调用方在6:59PM调用200次请求之后，在7:00PM可以再次调用240次请求，再两分钟之内这个接口就被调用了440次。
 针对上述的情况，只有一个计数器是不够的。我们需要将整个流量控制（1小时240次调用）看做一个大的计数桶，然后将这个大的桶拆分成一堆小桶，在每个小桶里都有自己的个性计数。我们可以使用1分钟、5分钟或者15分钟的小桶来拆分1小时的桶（这取决于系统需求，更小的桶意味着更多的内存和清理工作）。
 例如我们将1小时的水桶拆分为了1分钟的小桶，那么我们会记录6:00PM,6:01PM,6:02PM的调用次数。但当时间变为7:00PM时，我们需要将6:00PM的桶重置为0，并重新标记桶7:00PM。在7:01PM时会对6:01PM和7:01PM的桶做同样的操作。但是这种实现太复杂，很难做到复杂的限制规则。
 
-## 优化方法1
+# Sliding window log
 针对上面描述的时间边界问题，我们可以借助redis的list数据类型来实现.我们在list中保存了过去每次请求的时间戳记录
 
 <table>
@@ -799,6 +872,10 @@ lua代码
 
 参考 https://blog.domaintools.com/2013/04/rate-limiting-with-redis/
 https://engineering.classdojo.com/blog/2015/02/06/rolling-rate-limiter/
+
+# Sliding window counters
+
+我们也可以通过将大桶拆分为小桶的方式来处理时间边界问题，
 
 ## 优化方法2
 可以参考Guava的实现，基于redis实现自己的令牌桶:
