@@ -661,11 +661,11 @@ java代码
 
 	local key = "rate.limit." .. ARGV[1] --限流KEY
 	local limit = tonumber(ARGV[2]) --限流窗口允许的最大请求数
-	local interval = ARGV[3] --限流间隔,毫秒
-	local now = ARGV[4] --当前毫秒数
+	local interval = ARGV[3] --限流间隔,秒
+	local now = ARGV[4] --当前Unix时间戳
 	--计算key
 	local subject = math.floor(now / interval)
-	key = key .. "." ..subject;
+	key = key .. '.' .. subject .. '.' .. limit .. '.' .. interval
 	
 	local current = tonumber(redis.call("incr", key))
 	if current == 1 then
@@ -674,8 +674,8 @@ java代码
 	
 	local ttl = redis.call("ttl", key)
 	local remaining = math.max(limit - current, 0);
-	--返回值一次为：是否通过0或1，最大请求数，剩余令牌,请求时间，限流窗口重置时间
-	return {limit - current >= 0, limit, remaining, ttl}
+	--返回值为：是否通过0或1，最大请求数，剩余令牌,限流窗口重置时间
+	return {limit - current >= 0,  remaining, limit, ttl}
 
 ## 完整示例2：多个限流规则组合
 
@@ -689,44 +689,50 @@ java代码
 	for i, rate_limit in ipairs(rate_limits) do
 	    local limit = rate_limit[2]
 	    local interval = rate_limit[3]
-	    local limit_key = prefix_key .. rate_limit[1] .. "." .. math.floor(now / interval)
-	
+	    local subject = math.floor(now / interval)
+	    local limit_key =  prefix_key .. rate_limit[1] .. '.' .. subject .. '.' .. limit .. '.' .. interval
 	    local requested_num = tonumber(redis.call('GET', limit_key)) or 0 --请求数，默认为0
 	    if requested_num >= limit then
 	        passed = false
+	        --依次为　限流key,限流大小,限流间隔,剩余请求数,是否通过
 	        table.insert(result, { limit_key, limit, interval,  math.max(limit - requested_num, 0), 0})
 	    else
 	        table.insert(result, { limit_key, limit, interval,  math.max(limit - requested_num, 0), 1 })
 	    end
 	end
 	
-	--如果通过，将所有的限流请求数加1，并返回第一个限流的规则
-	if passed then
-	    for key,value in ipairs(result) do
-	        local limit_key = value[1]
-	        local limit = value[2]
-	        local interval = value[3]
+	local summary = { }
+	for key,value in ipairs(result) do
+	    local limit_key = value[1]
+	    local limit = value[2]
+	    local interval = value[3]
+	    if passed then
+	        --如果通过, 将所有的限流请求数加1
 	        local current = tonumber(redis.call("incr", limit_key))
 	        if current == 1 then
 	            redis.call("expire", limit_key, interval)
 	        end
-	        local ttl = redis.call("ttl", limit_key)
-	        table.insert(value,  math.max(limit - current, 0))
-	        table.insert(value, ttl)
+	        --添加两个值　是否通过0或1　剩余请求数
+	        table.insert(summary, 1)
+	        table.insert(summary, math.max(limit - current, 0))
+	    else
+	        local pass = value[5]
+	        if not pass or pass == 0 then
+	            table.insert(summary, 0)
+	            table.insert(summary, 0)
+	        else
+	            table.insert(summary, 1)
+	            table.insert(summary, value[4])
+	        end
 	    end
-	    return {1, result[1][2], result[1][6], result[1][7]}
+	    local ttl = redis.call("ttl", limit_key)
+	    --添加两个值　最大请求数　重置时间
+	    table.insert(summary, limit)
+	    table.insert(summary, ttl)
 	end
 	
-	--如果未通过，返回第一个没通过的限流规则
-	for key,value in ipairs(result) do
-	    local pass = value[5]
-	    local limit_key = value[1]
-	    if not pass or pass == 0 then
-	        local ttl = redis.call("ttl", limit_key)
-	        return {0, value[2], 0, ttl}
-	    end
-	end
-	return redis.error_reply('ratelimt error.')
+	--返回值为: 是否通过0或1, 剩余令牌, 最大请求数, 限流窗口重置时间 ,...
+	return summary
 
 # 时间边界问题
 上述Redis的实现在实际应用中存在本篇最开始时候描述的问题**“没有很好的处理单位时间的边界”**。假如一个接口每小时值允许240次调用。如果调用方在6:59PM调用200次请求之后，在7:00PM可以再次调用240次请求，再两分钟之内这个接口就被调用了440次。
@@ -886,56 +892,55 @@ https://engineering.classdojo.com/blog/2015/02/06/rolling-rate-limiter/
 	precision = math.min(precision, interval)
 	
 	--重新计算限流的KEY，避免传入相同的key，不同的间隔导致冲突
-	subject = subject .. ':l:' .. limit .. ':i:' .. interval .. ':p:' .. precision
+	subject = subject .. '.' .. limit .. '.' .. interval .. '.' .. precision
 	
 	--桶的数量，与位置
 	local bucket_num = math.ceil(interval / precision)
 	local oldest_req_key = subject .. ':o'
-	local oldest_req = tonumber(redis.call('GET', oldest_req_key)) or 0 --最早请求时间，默认为0
 	local bucket_key = math.floor(now / precision)
-	local reset_time = precision --重置时间
-	if oldest_req > 0 and now > oldest_req then
-	    bucket_key = math.floor((now - oldest_req) / precision) +math.floor(oldest_req / precision)
-	    reset_time = precision - (now - oldest_req) % precision;
-	end
-	
+	local trim_before = bucket_key - bucket_num + 1 --需要删除的key
+	local oldest_req = tonumber(redis.call('GET', oldest_req_key)) or trim_before --最早请求时间，默认为0
+	trim_before = math.min(oldest_req, trim_before)
 	--判断当前桶是否存在
 	local current_bucket = redis.call("hexists", subject, bucket_key)
 	if current_bucket == 0 then
 	    redis.call("hset", subject, bucket_key, 0)
 	end
 	
-	--old_key之前的key需要被删除
-	local old_key = bucket_key - bucket_num + 1
+	
 	--请求总数
 	local max_req = 0;
 	local subject_hash = redis.call("hgetall", subject) or {}
+	local last_req = now; --最近的访问时间，计算重置窗口
 	for i = 1, #subject_hash, 2 do
 	    local ts_key = tonumber(subject_hash[i])
-	    if ts_key < old_key and #subject_hash > 2  then
+	    if ts_key < trim_before and #subject_hash > 2  then
 	        redis.call("hdel", subject, ts_key)
+	--        table.insert(dele, ts_key)
 	    else
 	        local req_num =tonumber(subject_hash[i + 1])
 	        max_req = max_req +  req_num
+	        if req_num ~= 0 then
+	            last_req = math.min(last_req, math.floor(ts_key * precision))
+	        end
 	    end
 	end
+	local reset_time =interval - now+  last_req;
+	
 	if max_req >= limit then
 	    --返回值为：是否通过0或1，最大请求数，剩余令牌,限流窗口重置时间
-	    return {0, limit, 0, reset_time}
+	    return {0, 0, limit, reset_time}
 	end
 	
 	-- 当前请求+1
 	local current = tonumber(redis.call("hincrby", subject, bucket_key, 1))
 	-- interval+precision之后过期
 	redis.call("expire", subject, interval+precision)
-	if oldest_req == 0 then
-	    redis.call("setex", oldest_req_key,interval+precision , now )
-	else
-	    redis.call("expire", oldest_req_key,interval+precision  )
-	end
+	redis.call("setex", oldest_req_key,interval+precision , now )
 	
 	--返回值为：是否通过0或1，最大请求数，剩余令牌,限流窗口重置时间
-	return {1, limit, limit - max_req - 1, reset_time}
+	return {1,  limit - max_req - 1, limit, reset_time}
+
 
 ## 多个滑动窗口组合
 
@@ -954,84 +959,89 @@ https://engineering.classdojo.com/blog/2015/02/06/rolling-rate-limiter/
 	    precision = math.min(precision, interval)
 	
 	    --重新计算限流的KEY，避免传入相同的key，不同的间隔导致冲突
-	    local subject = prefix_key .. rate_limit[1] .. ':l:' .. limit .. ':i:' .. interval .. ':p:' .. precision
+	    local subject = prefix_key .. rate_limit[1] .. '.' .. limit .. '.' .. interval .. '.' .. precision
 	
 	    --桶的数量，与位置
 	    local bucket_num = math.ceil(interval / precision)
-	    local oldest_req_key = subject .. ':o'
-	    local oldest_req = tonumber(redis.call('GET', oldest_req_key)) or 0 --最早请求时间，默认为0
+	    local oldest_req_key = subject .. '.o'
 	    local bucket_key = math.floor(now / precision)
-	    local reset_time = precision --重置时间
-	    if oldest_req > 0 and now > oldest_req then
-	        bucket_key = math.floor((now - oldest_req) / precision) +math.floor(oldest_req / precision)
-	        reset_time = precision - (now - oldest_req) % precision;
-	    end
-	
+	    local trim_before = bucket_key - bucket_num + 1 --需要删除的key
+	    local oldest_req = tonumber(redis.call('GET', oldest_req_key)) or trim_before --最早请求时间，默认为0
+	    trim_before = math.min(oldest_req, trim_before)
 	    --判断当前桶是否存在
 	    local current_bucket = redis.call("hexists", subject, bucket_key)
 	    if current_bucket == 0 then
 	        redis.call("hset", subject, bucket_key, 0)
 	    end
 	
-	    --old_key之前的key需要被删除
-	    local old_key = bucket_key - bucket_num + 1
 	    --请求总数
 	    local max_req = 0;
 	    local subject_hash = redis.call("hgetall", subject) or {}
+	    local last_req = now; --最近的访问时间，计算重置窗口
 	    for i = 1, #subject_hash, 2 do
 	        local ts_key = tonumber(subject_hash[i])
-	        if ts_key < old_key and #subject_hash > 2  then
+	        if ts_key < trim_before and #subject_hash > 2  then
 	            redis.call("hdel", subject, ts_key)
+	            --        table.insert(dele, ts_key)
 	        else
 	            local req_num =tonumber(subject_hash[i + 1])
 	            max_req = max_req +  req_num
+	            if req_num ~= 0 then
+	                last_req = math.min(last_req, math.floor(ts_key * precision))
+	            end
 	        end
 	    end
-	
+	    local reset_time =interval - now+  last_req;
 	    if max_req >= limit then
 	        passed = false
 	        --依次为　限流key,限流大小,限流间隔,对应的桶,最大请求数,是否成功,重置时间
-	        table.insert(result, { subject, limit, interval, bucket_key, max_req, 0, reset_time, precision,oldest_req_key, oldest_req})
+	        table.insert(result, { subject, limit, interval, bucket_key, max_req, 0, reset_time, precision,oldest_req_key})
 	    else
-	        table.insert(result, { subject, limit, interval, bucket_key, max_req, 1, reset_time, precision,oldest_req_key, oldest_req})
+	        table.insert(result, { subject, limit, interval, bucket_key, max_req, 1, reset_time, precision,oldest_req_key})
 	    end
 	
 	end
 	
-	--如果未通过，每个规则对应的桶再减１,返回第一个没通过的限流规则
-	if passed ~= true then
-	    --返回值为：是否通过0或1，最大请求数，剩余令牌,限流窗口重置时间
+	-- 如果通过，增加每个限流规则
+	if passed == true then
 	    for key,value in ipairs(result) do
-	        local pass = value[6]
-	        if not pass or pass == 0 then
-	            --返回值为：是否通过0或1，最大请求数，剩余令牌,限流窗口重置时间
-	            return {0, value[2], 0, value[7]}
-	        end
-	    end
-	    return redis.error_reply('ratelimt error.')
-	end
-	
-	--如果通过，返回第一个限流的规则
-	for key,value in ipairs(result) do
-	    -- 当前请求+1
-	    local subject = value[1]
-	    local interval = value[3]
-	    local bucket_key = value[4]
-	    local precision = value[8]
-	    local oldest_req_key = value[9]
-	    local oldest_req = value[10]
-	    local current = tonumber(redis.call("hincrby", subject, bucket_key, 1))
-	    -- interval+precision之后过期
-	    redis.call("expire", subject, interval+precision)
-	    if oldest_req == 0 then
+	        -- 当前请求+1
+	        local subject = value[1]
+	        local interval = value[3]
+	        local bucket_key = value[4]
+	        local precision = value[8]
+	        local oldest_req_key = value[9]
+	        local current = tonumber(redis.call("hincrby", subject, bucket_key, 1))
+	        -- interval+precision之后过期
+	        redis.call("expire", subject, interval+precision)
 	        redis.call("setex", oldest_req_key,interval+precision , now )
-	    else
-	        redis.call("expire", oldest_req_key,interval+precision  )
 	    end
 	end
 	
-	--返回值为：是否通过0或1，最大请求数，剩余令牌,限流窗口重置时间
-	return {1, result[1][2], result[1][2] - result[1][5] - 1, result[1][7]}
+	-- 返回结果
+	local summary = {}
+	for key,value in ipairs(result) do
+	    local pass = value[6]
+	    if not pass or pass == 0 then
+	        --添加四个值　是否通过0或1　剩余请求数 最大请求数　重置时间
+	        table.insert(summary, 0)
+	        table.insert(summary, 0)
+	        table.insert(summary, value[2])
+	        table.insert(summary, value[7])
+	    else
+	        table.insert(summary, 1)
+	        if passed == true then
+	            table.insert(summary, value[2] - value[5] - 1)
+	        else
+	            table.insert(summary, value[2] - value[5])
+	        end
+	
+	        table.insert(summary, value[2])
+	        table.insert(summary, value[7])
+	    end
+	end
+	
+	return summary
 
 # 令牌桶 Token bucket
 可以参考Guava的实现，基于redis实现自己的令牌桶，这个令牌桶有下列属性:
@@ -1043,254 +1053,65 @@ https://engineering.classdojo.com/blog/2015/02/06/rolling-rate-limiter/
 - value: 桶中可用的令牌数
 - lastUpdate: 桶最近一次更新时间（refillTime）
 
-	local key = "token.bucket." .. ARGV[1] --桶的标识符
-	local maxAmount = math.max(tonumber(ARGV[2]), 1) --桶中最大令牌数，最小值1
-	local refillTime = tonumber(ARGV[3]) or 1000-- 向桶中添加令牌的周期，单位毫秒
-	local refillAmount = math.max(tonumber(ARGV[4]), 1) or 1 -- 每次refillTime向桶中添加的令牌数量，默认为1
-	local tokens_to_take       = tonumber(ARGV[5]) or 1 --当前请求需要的令牌数量
-	local now = tonumber(ARGV[6])
-	
-	local available_tokens = maxAmount --可用的令牌数默认等于桶的大小
-	local last_refill = now --第一次的last_refill等于当前时间
-	local current = redis.call('HMGET', key, 'last_refill', 'available_tokens')
-	if current.err ~= nil then
-	    redis.call('DEL', key)
-	    current = {}
-	    redis.log(redis.LOG_NOTICE, 'Cannot get ratelimit ' .. key)
-	    return redis.error_reply('Cannot get ratelimit ' .. key)
-	end
-	
-	
-	--计算从上次的时间戳与当前时间戳计算应该添加的令牌数
-	if current[1] then
-	    --上次请求的时间
-	    last_refill = current[1]
-	    local content = current[2]
-	    --计算应该生成的令牌数
-	    local delta_ms = math.max(now - last_refill, 0)
-	    local refillCount  = math.floor(delta_ms / refillTime) * refillAmount
-	    --如果桶满，直接使用桶的容量
-	    available_tokens = math.min(content + refillCount, maxAmount)
-	end
-	
-	-- 计算是否有足够的令牌给调用方
-	local enough_tokens = available_tokens >= tokens_to_take
-	
-	-- 将令牌给调用方之后，桶中剩余的令牌数
-	if enough_tokens then
-	    last_refill = now
-	    available_tokens = math.min(available_tokens - tokens_to_take, maxAmount)
-	else
-	    redis.log(redis.LOG_NOTICE, 'Cannot get enough tokens, tokens_to_take:' .. tokens_to_take .. ',available_tokens:' .. available_tokens)
-	    return { 0, maxAmount, available_tokens, refillTime }
-	end
-	
-	--重新设置令牌桶
-	redis.call('HMSET', key,
-	    'last_refill', last_refill,
-	    'available_tokens', available_tokens)
-	
-	--如果没有新的请求过来，在桶满之后可以直接将该令牌删除。
-	redis.call('PEXPIRE', key, math.ceil((maxAmount /  refillAmount) * refillTime))
-	
-	return { 1, maxAmount, available_tokens, refillTime }
 
 
-上面的令牌桶，只能实现平滑速率处理请求，不能对API的访问量做限制。因为每隔一段时间，就会往桶中添加令牌
-
-- 每个限流规则都有两个key：令牌桶中可用的令牌数、上次补充令牌的时间戳，**用hash存储**
-- 如果收到新的请求，保存当前请求的时间戳
-- 计算从上次的时间戳到当前时间应该添加的令牌数
-- 计算令牌桶中最终可用的令牌数，如果桶满，直接取桶容量
-
-lua代码
-
-	local current_timestamp_ms = tonumber(ARGV[1]) -- 当前请求的时间
-	local rate        = tonumber(ARGV[2]) -- 速率，每秒中向桶中存入多少令牌
-	local interval = 1000 / tonumber(ARGV[2]) --放入令牌的间隔时间，1000毫秒/速率
-	local bucket_size          = tonumber(ARGV[3]) -- 令牌桶的最大容量
-	local available_tokens          = tonumber(ARGV[3]) -- 当前可用的令牌数量，默认等于令牌桶的大小
-	local tokens_to_take       = tonumber(ARGV[4]) --当前请求的需要的令牌数量
-	local key = "rate.limit:" .. KEYS[1] --限流KEY
-	
-	 --last_drip:上次请求的时间,content：剩余的令牌数量
-	local current = redis.pcall('HMGET', key, 'last_drip', 'available_tokens')
-	
-	if current.err ~= nil then
-	    redis.call('DEL', key)
-	    current = {}
-	end
-	
-	--根据上次的时间戳与当前时间戳计算应该添加的令牌数
-	if current[1] then
-	    --上次请求的时间
-	    local last_drip = current[1]
-	    local content = current[2]
-	
-	    --计算应该生成的令牌数
-	    local delta_ms = math.max(current_timestamp_ms - last_drip, 0)
-	    local drip_amount = math.floor(delta_ms / interval)
-	
-	    --如果桶满，直接使用桶的容量
-	    available_tokens = math.min(content + drip_amount, bucket_size)
-	end
-	
-	-- 计算是否有足够的令牌给调用方
-	local enough_tokens = available_tokens >= tokens_to_take
-	
-	-- 将令牌给调用方之后，桶中剩余的令牌数
-	if enough_tokens then
-	    available_tokens = math.min(available_tokens - tokens_to_take, bucket_size)
-	end
-	
-	--重新设置令牌桶
-	redis.call('HMSET', key,
-	            'last_drip', current_timestamp_ms,
-	            'available_tokens', available_tokens)
-	
-	--如果没有新的请求过来，在桶满之后可以直接将该令牌删除，节省空间
-	redis.call('PEXPIRE', key, math.ceil(bucket_size *  interval))
-	
-	return { current_timestamp_ms, available_tokens, enough_tokens }
-
-
-Java代码
-
-	public class TokenBucket {
-	  private final Jedis jedis;
-	
-	  // 向令牌桶中添加令牌的速率
-	  private final double rate;
-	
-	  // 令牌桶的最大容量
-	  private final int size;
-	
-	  private final String key;
-	
-	  public TokenBucket(Jedis jedis, double rate, int size, String key) {
-	    this.jedis = jedis;
-	    this.rate = rate;
-	    this.size = size;
-	    this.key = key;
-	  }
-	
-	  public Object acquire(int permits) throws IOException {
-	    List<String> keys = Collections.singletonList(key);
-	    List<String> argv =
-	            Arrays.asList(String.valueOf(System.currentTimeMillis()), String.valueOf(rate)
-	                    , String.valueOf(size), String.valueOf(permits));
-	
-	    return jedis.eval(loadScriptString("token_bucket.lua"), keys, argv);
-	  }
-	
-	  // 加载Lua代码
-	  private String loadScriptString(String fileName) throws IOException {
-	    Reader reader =
-	            new InputStreamReader(
-	                    TokenBucketTest.class.getClassLoader().getResourceAsStream(fileName));
-	    return CharStreams.toString(reader);
-	  }
-	}
-
-测试程序
-
-    System.out.println(new TokenBucket(jedis, 1, 10,  "192.168.1.100").acquire(8));
-    System.out.println(new TokenBucket(jedis, 1, 10,  "192.168.1.100").acquire(4));
-    TimeUnit.SECONDS.sleep(3);
-    System.out.println(new TokenBucket(jedis, 1, 10, "192.168.1.100").acquire(4));
-    TimeUnit.SECONDS.sleep(3);
-    System.out.println(new TokenBucket(jedis, 1, 10, "192.168.1.100").acquire(4));
-    System.out.println(new TokenBucket(jedis, 1, 10, "192.168.1.100").acquire(1));
-
-    TimeUnit.SECONDS.sleep(15);
-    System.out.println(new TokenBucket(jedis, 1, 10, "192.168.1.100").acquire(1));
-
-输出
-
-	[1484548042632, 2, 1]
-	[1484548042655, 2, null]
-	[1484548045658, 1, 1]
-	[1484548048661, 0, 1]
-	[1484548048664, 0, null]
-	[1484548063667, 9, 1]
-
-通过输出我们可以看到:
-
-- 第1个请求获取到了8个令牌此时桶中还剩余2个令牌
-- 第2个请求没有获取到足够的令牌
-- 等待3秒钟后桶中有5个令牌，第3个请求获取到了足够的令牌
-- 再次等待3秒，第4个请求获取到了4个令牌，桶中没有剩余的令牌
-- 第5个请求没有获取到足够的令牌
-- 第6个请求虽然等待了15秒，但是桶中最大的令牌数是10，所以最后桶中还剩下9个令牌
-
-查看限流的KEY
-
-	127.0.0.1:6379> ttl rate.limit:192.168.1.100
-	(integer) 7
-	127.0.0.1:6379> ttl rate.limit:192.168.1.100
-	(integer) 10
-	127.0.0.1:6379> ttl rate.limit:192.168.1.100
-	(integer) 9
-	127.0.0.1:6379> ttl rate.limit:192.168.1.100
-	(integer) 2
-	127.0.0.1:6379> ttl rate.limit:192.168.1.100
-	(integer) -2
-
-在没有新的请求之后，key在10秒后被删除
-
-上述的代码存在一个小小的隐患，当前请求的current_timestamp_ms是由调用方传入的，在分布式环境下，有可能有的调用方传入的时间不正确导致令牌获取错误。所以我们需要在lua脚本中生成当前请求的毫秒数，然而由于lua的标准库未提供获取毫秒数的函数，我通过redis的TIME命令用当前时间戳和微妙数计算出了毫秒数
-
-	local rate        = tonumber(ARGV[1]) -- 速率，每秒中向桶中存入多少令牌
-	local interval = 1000 / tonumber(ARGV[1]) --放入令牌的间隔时间，1000毫秒/速率
-	local bucket_size          = tonumber(ARGV[2]) -- 令牌桶的最大容量
-	local available_tokens          = tonumber(ARGV[2]) -- 当前可用的令牌数量，默认等于令牌桶的大小
-	local tokens_to_take       = tonumber(ARGV[3]) --当前请求的需要的令牌数量
-	local key = "rate.limit:" .. KEYS[1] --限流KEY
-	
-	--借助TIME 计算当前请求的时间
-	local current_time = redis.pcall('TIME')
-	local current_timestamp_ms = tonumber(current_time[1]) * 1000 + math.floor(tonumber(current_time[2]) / 1000)
-	
-	
-	 --last_drip:上次请求的时间,content：剩余的令牌数量
-	local current = redis.pcall('HMGET', key, 'last_drip', 'available_tokens')
-	
-	if current.err ~= nil then
-	    redis.call('DEL', key)
-	    current = {}
-	end
-	
-	--计算从上次的时间戳与当前时间戳计算应该添加的令牌数
-	if current[1] then
-	    --上次请求的时间
-	    local last_drip = current[1]
-	    local content = current[2]
-	
-	    --计算应该生成的令牌数
-	    local delta_ms = math.max(current_timestamp_ms - last_drip, 0)
-	    local drip_amount = math.floor(delta_ms / interval)
-	
-	    --如果桶满，直接使用桶的容量
-	    available_tokens = math.min(content + drip_amount, bucket_size)
-	end
-	
-	-- 计算是否有足够的令牌给调用方
-	local enough_tokens = available_tokens >= tokens_to_take
-	
-	-- 将令牌给调用方之后，桶中剩余的令牌数
-	if enough_tokens then
-	    available_tokens = math.min(available_tokens - tokens_to_take, bucket_size)
-	end
-	
-	--重新设置令牌桶
-	redis.call('HMSET', key,
-	            'last_drip', current_timestamp_ms,
-	            'available_tokens', available_tokens)
-	
-	--如果没有新的请求过来，在桶满之后可以直接将该令牌删除。
-	redis.call('PEXPIRE', key, math.ceil(bucket_size *  interval))
-	
-	return { current_timestamp_ms, available_tokens, enough_tokens }
+		local subject = ARGV[1]
+		local key = "token.bucket." .. subject --桶的标识符
+		local burst = math.max(tonumber(ARGV[2]), 1) --桶中最大令牌数，最小值1，
+		local refillTime = tonumber(ARGV[3]) or 1000-- 向桶中添加令牌的周期，单位毫秒
+		local refillAmount = math.max(tonumber(ARGV[4]), 1) or 1 -- 每次refillTime向桶中添加的令牌数量，默认为1
+		local tokens_to_take       = tonumber(ARGV[5]) or 1 --当前请求需要的令牌数量
+		local now = tonumber(ARGV[6]) --当前时间，单位毫秒
+		
+		local available_tokens = burst --可用的令牌数默认等于桶的容量
+		local last_update = now --第一次的last_update等于当前时间
+		local current = redis.call('HMGET', key, 'last_update', 'available_tokens')
+		if current.err ~= nil then
+		    redis.call('DEL', key)
+		    current = {}
+		    redis.log(redis.LOG_NOTICE, 'Cannot get ratelimit ' .. key)
+		    return redis.error_reply('Cannot get ratelimit ' .. key)
+		end
+		
+		
+		--计算从上次的时间戳与当前时间戳计算应该添加的令牌数
+		if current[1] then
+		    --上次请求的时间
+		    last_update = current[1]
+		    local content = current[2]
+		    --计算应该生成的令牌数
+		    local delta_ms = math.max(now - last_update, 0)
+		    local refillCount  = math.floor(delta_ms / refillTime) * refillAmount
+		    --如果桶满，直接使用桶的容量
+		    available_tokens = math.min(content + refillCount, burst)
+		end
+		
+		-- 计算是否有足够的令牌给调用方
+		local enough_tokens = available_tokens >= tokens_to_take
+		--之后的请求要偿还之前发生的突发
+		
+		-- 将令牌给调用方之后，桶中剩余的令牌数
+		if enough_tokens then
+		    available_tokens = math.min(available_tokens - tokens_to_take, burst)
+		    last_update = last_update + math.floor(tokens_to_take / refillAmount * refillTime)
+		else
+		    redis.log(redis.LOG_NOTICE, 'Cannot get enough tokens, tokens_to_take:' .. tokens_to_take .. ',available_tokens:' .. available_tokens)
+		    --计算恢复的时间
+		    local reset_time = last_update - now
+		    if reset_time < 0 then
+		        reset_time = now - last_update
+		    end
+		    return { 0, math.max(available_tokens, 0), burst, reset_time}
+		end
+		--重新设置令牌桶
+		redis.call('HMSET', key,
+		    'last_update', last_update,
+		    'available_tokens', available_tokens)
+		
+		--如果没有新的请求过来，在桶满之后可以直接将该令牌删除。
+		redis.call('PEXPIRE', key, math.ceil((burst /  refillAmount) * refillTime))
+		
+		return {1,  math.max(available_tokens, 0), burst,last_update - now }
 
 参考:https://github.com/auth0/limitd/blob/master/lib/db/redis/drip_and_take.lua
 
