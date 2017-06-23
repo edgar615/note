@@ -31,6 +31,20 @@ https://en.wikipedia.org/wiki/Circuit_breaker_design_pattern
     开启：在开启的状态下任何请求都会“直接”被拒绝并且抛出异常讯息。
     半开启：在此状态下断路器会允许部分的请求，如果这些请求都能成功通过，那么就意味着错误已经不存在，则会被“切换回”关闭状态并“重置”计数。倘若请求中有“任一”的错误发生，则会回复到“开启”状态，并且重新计时，给予系统一段休息时间。
 
+![](circuit_breaker1.png)
+
+断路器的状态切换
+
+![](circuit-breaker-states.png)
+
+- State is in CLOSED test, everything is normal
+- The maximum consecutive allowed errors (cb_max_errors) is reached, the system changes to OPEN. No more connections to backend sent
+- System stays in OPEN state for N seconds (cb_timeout)
+- System changes to HALF-OPEN and allows 1 connection to pass.
+- If the connection succeeded change to CLOSED, everything back to normal. If it failed switch to OPEN again.
+
+
+上面的两张图来源于krakend
 # Vert.x的断路器
 
 见 vertx/Circuit_Breaker.md
