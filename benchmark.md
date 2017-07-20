@@ -1,4 +1,6 @@
-# Benchmark
+Benchmark
+
+# JMH
 通过JMH实现基准测试
 
 http://www.importnew.com/12548.html
@@ -6,6 +8,8 @@ http://www.importnew.com/12548.html
 http://java-performance.info/jmh/
 
 http://java-performance.info/introduction-jmh-profilers/
+
+http://blog.dyngr.com/blog/2016/10/29/introduction-of-jmh/
 
 ## Hello World
 
@@ -105,6 +109,22 @@ http://java-performance.info/introduction-jmh-profilers/
 
 	CI (99.9%): [3389070711.719, 3401916893.496] (assumes normal distribution) 假设结果是正常分布的，基于该样本大小，该方法的真正执行次数在`3395493802.608-6423090.888`到`3395493802.608+6423090.888`之间
 
+## 基本概念
+### Mode
+
+Mode 表示 JMH 进行 Benchmark 时所使用的模式。通常是测量的维度不同，或是测量的方式不同。目前 JMH 共有四种模式：
+
+    Throughput: 整体吞吐量，例如“1秒内可以执行多少次调用”。
+    AverageTime: 调用的平均时间，例如“每次调用平均耗时xxx毫秒”。
+    SampleTime: 随机取样，最后输出取样结果的分布，例如“99%的调用在xxx毫秒以内，99.99%的调用在xxx毫秒以内”
+    SingleShotTime: 以上模式都是默认一次 iteration 是 1s，唯有 SingleShotTime 是只运行一次。往往同时把 warmup 次数设为0，用于测试冷启动时的性能。
+
+### Iteration
+
+Iteration 是 JMH 进行测试的最小单位。在大部分模式下，一次 iteration 代表的是一秒，JMH 会在这一秒内不断调用需要 benchmark 的方法，然后根据模式对其采样，计算吞吐量，计算平均执行时间等。
+### Warmup
+
+Warmup 是指在实际进行 benchmark 前先进行预热的行为。为什么需要预热？因为 JVM 的 JIT 机制的存在，如果某个函数被调用多次之后，JVM 会尝试将其编译成为机器码从而提高执行速度。所以为了让 benchmark 的结果更加接近真实情况就需要进行预热。
 
 ## 测试模式 BenchmarkMode
 
@@ -1322,3 +1342,78 @@ JMH使用所有@Param字段的输出结果。因此，如果第一个字段有2�
 	}
 
 **还有很多JMH的功能目前用的少，也不是太懂，可以阅读官方提供的例子，以后用到再补充**
+
+# JMeter
+由于不知道怎么用JMH对Vert.x的异步方法做基准测试，所以对基于Vert.x实现的一些组件的基准测试使用JMeter测试
+
+1. 引入下列依赖
+
+    <dependency>
+        <groupId>org.apache.jmeter</groupId>
+        <artifactId>ApacheJMeter_core</artifactId>
+        <version>3.2</version>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.jmeter</groupId>
+        <artifactId>ApacheJMeter_java</artifactId>
+        <version>3.2</version>
+    </dependency>
+
+2. 实现JavaSamplerClient接口，可以继承AbstractJavaSamplerClient
+
+DEMO1
+
+    public class AddNumberTest extends AbstractJavaSamplerClient {
+      public SampleResult runTest(JavaSamplerContext javaSamplerContext) {
+        String var1 = javaSamplerContext.getParameter("var1");
+        String var2 = javaSamplerContext.getParameter("var2");
+        SampleResult result = new SampleResult();
+        result.sampleStart();
+        result.setSampleLabel("Test Sample");
+        // Test Code
+
+        AddNumbers addNumbers = new AddNumbers();
+        if (addNumbers.addTwoNumbers(Integer.valueOf(var1), Integer.valueOf(var2)) == 2) {
+          result.sampleEnd();
+          result.setResponseCode("200");
+          result.setResponseMessage("OK");
+          result.setSuccessful(true);
+        } else {
+          result.sampleEnd();
+          result.setResponseCode("500");
+          result.setResponseMessage("NOK");
+          result.setSuccessful(false);
+        }
+        return result;
+
+      }
+
+      @Override
+      public Arguments getDefaultParameters() {
+        Arguments defaultParameters = new Arguments();
+        defaultParameters.addArgument("var1", "1");
+        defaultParameters.addArgument("var2", "2");
+        return defaultParameters;
+      }
+
+    }
+
+DEMO2
+
+  public class JavaRequestSamplerDemo extends AbstractJavaSamplerClient {
+
+    public SampleResult runTest(JavaSamplerContext ctx) {
+      JMeterVariables vars = JMeterContextService.getContext().getVariables();
+      vars.put("demo", "demoVariableContent");
+
+      SampleResult sampleResult = new SampleResult();
+      sampleResult.setSuccessful(true);
+      sampleResult.setResponseCodeOK();
+      sampleResult.setResponseData("haha".getBytes());
+      sampleResult.setResponseMessageOK();
+      return sampleResult;
+    }
+  }
+
+
+3. 将工程打包后将jar放入 jmeter/lib/ext之后创建java请求的取样，进行测试
