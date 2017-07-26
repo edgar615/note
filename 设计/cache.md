@@ -4,7 +4,9 @@ https://segmentfault.com/a/1190000005886009
 
 http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=404087915&idx=1&sn=075664193f334874a3fc87fd4f712ebc&mpshare=1&scene=23&srcid=1013nFtafpDeYoP8G8hm4iqs#rd
 
-http://tech.meituan.com/cache_about.html​
+http://tech.meituan.com/cache_about.html
+
+http://coolshell.cn/articles/17416.html​
 
 # 缓存算法
 
@@ -288,3 +290,37 @@ void AddCountByType(long type){
 2. 线程2对缓存进行操作，对key想要写入value2，写入签名v2-sign
 3. 如果不加锁，线程1和线程2对同一个定长区域进行一个并发的写操作，可能每个线程写成功一半，导致出现脏数据产生，最终的结果即不是value1也不是value2，而是一个乱七八糟的不符合预期的值value-unexpected，但签名，一定是v1-sign或者v2-sign中的任意一个 
 4. 数据读取的时候，不但要取出value，还要像消息接收方收到消息一样，校验一下签名，如果发现签名不一致，缓存则返回NULL，即cache miss。
+
+
+# 缓存的几种使设计模式
+
+
+## Cache-Aside
+Cache-Aside是缓存最常用的模式
+
+- 当一个应用程序需要数据时，首先在缓存中查找；如果在缓存中取到了数据，直接使用这个数据**（命中**）；如果没有取到数据，则从数据库中取数据，取到之后在放入缓存**（未命中）**
+- 应用程序更新数据时，先将数据写入数据库，然后在让缓存失效
+
+这种模式下应用程序负责对数据库的读写，而缓存不与数据库交互。缓存被"kept aside"(放在一边)，作为一个更快速的内存数据存储。应用程序在读取数据库中的任何数据之前先检查缓存。同时，应用程序在对数据库进行任何更新后需要更新缓存。通过上述的操作应用程序确保缓存与数据库保持同步。
+
+![](cache_aside1.png)
+
+![](cache_aside2.png)
+
+## Read Through
+
+应用程序从缓存中读取数据,如果从缓存中取到了数据，直接使用这个数据；如果未命中，则由缓存从数据库中取出数据，并更新缓存（不再由调用方负责）。
+
+![](read_through1.png)
+
+## Write Through
+
+与Read Through类似，应用程序直接更新缓存，然后再由缓存更新数据库。如果缓存和数据库都被更新成功，则认为写入操作成功（同步操作）。**如果缓存写入成功，数据库写入失败，需要考虑回退的问题**
+
+![](write_through1.png)
+
+## Write Behind Caching Pattern
+
+我们也可以将数据库更新改为延迟更新：只要数据被写入缓存，就认为是成功的，然后再通过异步方式更新数据库。**数据不是强一致性的，可能会丢失**
+
+![](write_behind1.png)
