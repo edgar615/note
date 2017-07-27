@@ -4,6 +4,124 @@ http://vertx.io/blog/an-introduction-to-the-vert-x-context-object/
 
 当执行一个vert.x的handler，或者verticle的start、stop方法时，方法的执行会与一个特定的context关联。一般这个context是一个event-loop类型的context，它会与一个event-loop的线程关联。context会被传播，当一个handler被一个特定的context创建之后，这个handler的执行会被同一个context执行。例如：如果verticle的start方法设置了一些eventbus的handler，那么这些handler会在同一个context里执行，这个context与verticle的start方法也是同一个context.
 
+> runOnContext is typically used when you've received some result from a 3rd party asynchronous API and you wish to process it on the correct context for the verticle.
+
+
+    Context context = Vertx.currentContext();
+    System.out.println("Running with context : " + Vertx.currentContext());
+// Our blocking action
+    System.out.println(Thread.currentThread());
+    Thread thread = new Thread() {
+      public void run() {
+        // No context here!
+        System.out.println(Thread.currentThread());
+        System.out.println("Current context : " + Vertx.currentContext());
+        context.runOnContext(v -> {
+          // Runs on the same context
+          System.out.println(Thread.currentThread());
+          System.out.println("Runs on the original context : " + Vertx.currentContext());
+        });
+      }
+    };
+//
+    thread.start();
+
+输出
+
+	Running with context : io.vertx.core.impl.EventLoopContext@7112b8fe
+	Thread[vert.x-eventloop-thread-0,5,main]
+	Thread[Thread-4,5,main]
+	Current context : null
+	Thread[vert.x-eventloop-thread-0,5,main]
+	Runs on the original context : io.vertx.core.impl.EventLoopContext@7112b8fe
+
+通过上面的例子可以看到 thread.run最外层的线程和context都发生了变化
+
+**blocking**
+
+    vertx.runOnContext(v -> {
+
+      // On the event loop
+      System.out.println("Calling blocking block from " + Thread.currentThread());
+
+      Handler<Future<String>> blockingCodeHandler = future -> {
+        // Non event loop
+        System.out.println("Computing with " + Thread.currentThread());
+        future.complete("some result");
+      };
+
+      Handler<AsyncResult<String>> resultHandler = result -> {
+        // Back to the event loop
+        System.out.println("Got result in " + Thread.currentThread());
+      };
+
+      // Execute the blocking code handler and the associated result handler
+      vertx.executeBlocking(blockingCodeHandler, resultHandler);
+    });
+
+输出
+
+	Calling blocking block from Thread[vert.x-eventloop-thread-0,5,main]
+	Computing with Thread[vert.x-worker-thread-0,5,main]
+	Got result in Thread[vert.x-eventloop-thread-0,5,main]
+
+下面的两个测试方法中testBlock中的toComplete.thenRun，虽然它的线程没有改变，但是已经不再正确的context上了，所以不会调用context上定义的异常处理函数，这个方法会一直阻塞。
+
+testImmediateCompletion方法，通过使用runOnContext方法可以使toComplete.thenRun重新回到正确的context上。
+
+    @Rule
+    public final RunTestOnContext rule = new RunTestOnContext();
+
+    //线程未变，toComplete.thenRun运行在正确的线程上，但是不在正确的context上,所以不会调用context上的异常处理函数，这个方法会一直阻塞
+    @Test
+    public void testBlock(TestContext context) {
+        final Async async = context.async();
+        final Vertx vertx = rule.vertx();
+        final CompletableFuture<Integer> toComplete = new CompletableFuture<>();
+        // delay future completion by 500 ms
+        final String threadName = Thread.currentThread().getName();
+        System.out.println(threadName);
+        toComplete.complete(100);
+        vertx.getOrCreateContext().exceptionHandler(throwable -> {
+            throwable.printStackTrace();
+            async.complete();
+        });
+        toComplete.thenRun(() -> {
+            System.out.println(Thread.currentThread().getName());
+            context.assertEquals(Thread.currentThread().getName(), threadName);
+            throw new RuntimeException("a");
+			//async.complete();
+        });
+    }
+
+    @Test
+    public void testImmediateCompletion(TestContext context) {
+        final Async async = context.async();
+        final Vertx vertx = rule.vertx();
+        final CompletableFuture<Integer> toComplete = new CompletableFuture<>();
+        // delay future completion by 500 ms
+        final String threadName = Thread.currentThread().getName();
+        System.out.println(threadName);
+        toComplete.complete(100);
+        vertx.getOrCreateContext().exceptionHandler(throwable -> {
+            throwable.printStackTrace();
+            async.complete();
+        });
+        final Context currentContext = vertx.getOrCreateContext();
+        toComplete.thenRun(() -> {
+            currentContext.runOnContext(v -> {
+                System.out.println(Thread.currentThread().getName());
+                context.assertEquals(Thread.currentThread().getName(), threadName);
+                throw new RuntimeException("a");
+				//async.complete();
+            });
+        });
+    }
+
+
+> While getting back onto the correct context may not be critical if you have remained on the event loop thread throughout, it is critical if you are going to invoke subsequent vert.x handlers, update verticle state or anything similar, so it’s a sensible general approach.
+
+
 当我们通过deployVerticle方法部署一个Verticle的时候，会为这个Verticle分配一个Context
 
 	  public void deployVerticle(String identifier,
