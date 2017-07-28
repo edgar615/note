@@ -64,7 +64,7 @@
  激活系统类的断言。
  
 **-disablesystemassertions**
-
+R
 **-dsa**
 
  关闭系统类的断言。
@@ -226,7 +226,8 @@
 
 -XX:NewSize=2.125m 	新生代对象生成时占用内存的默认值
 
--XX:ReservedCodeCacheSize=32m 	保留代码占用的内存容量
+-XX:ReservedCodeCacheSize=32m 	代码缓存的最大值
+-XX:InitialCodeCacheSize=32m 	代码缓存的初始值
 
 -XX:ThreadStackSize=512 	设置线程栈大小，若为0则使用系统默认值
 
