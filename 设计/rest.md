@@ -196,7 +196,7 @@ q的查询参数用来描述搜索条件
 - foo:*bar* 包含bar的条件
 -language:javascript 取反language !=javascript的条件 -created:<=2012-07-04表示created>2012-07-04，foo:*bar、foo:bar*、foo:*bar*暂时不支持取反
 
-多个条件用空格组合，URL编码后为+，
+多个条件用空格组合，URL编码后为+， **,将来会用在in或者or查询**
 根据上面的规则，空格、> >= < <= .. * ^ $属于系统字符，不应该出现在查询参数或者查询条件中
 
 ## 限制API返回的字段

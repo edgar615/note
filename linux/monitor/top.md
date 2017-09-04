@@ -220,3 +220,36 @@ top命令默认在一个特定间隔(3秒)后刷新显示。要手动刷新，�
 	03:24:07 PM  dev252-5      0.00      0.00      0.00      0.00      0.00      0.00      0.00      0.00
 
 # 再利用 iotop 确认到底哪些进程消耗的磁盘I/O资源最多：
+
+
+
+## 找到最耗CPU的进程
+
+top -c然后用P（大写p）按CPU使用率排序
+
+## 找到最耗CPU的线程
+
+top -Hp <PID> 线程一个进程的线程运行信息
+
+P(大写P)按CPU使用率排序
+
+## 将线程PID转换为16进制
+
+printf "%x\n" <PID>
+	
+	114f
+
+查看堆栈
+pstack，jstatck
+
+	$ jstack 4420 | grep '114f' -C5 --color
+	   java.lang.Thread.State: RUNNABLE
+	
+	"C1 CompilerThread2" #7 daemon prio=9 os_prio=0 tid=0x00007ff6280b2800 nid=0x1150 waiting on condition [0x0000000000000000]
+	   java.lang.Thread.State: RUNNABLE
+	
+	"C2 CompilerThread1" #6 daemon prio=9 os_prio=0 tid=0x00007ff6280b0800 nid=0x114f waiting on condition [0x0000000000000000]
+	   java.lang.Thread.State: RUNNABLE
+	
+	"C2 CompilerThread0" #5 daemon prio=9 os_prio=0 tid=0x00007ff6280ad800 nid=0x114e waiting on condition [0x0000000000000000]
+	   java.lang.Thread.State: RUNNABLE

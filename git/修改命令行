@@ -1,0 +1,5 @@
+默认使用
+这个是使用nano进行编辑提交的页面，退出方法为：
+Ctrl + X然后输入y再然后回车，就可以退出了
+如果你想把默认编辑器换成别的：
+在GIT配置中设置 core.editor: git config --global core.editor "vim"

@@ -114,6 +114,25 @@ jmap是JDK自带的工具软件，主要用于打印指定Java进程(或核心�
 
 jmap -histo:live 这个命令执行，JVM会先触发gc，然后再统计信息。
 
+## 找到最耗内存对象
+
+	$ jmap -histo:live 4420 | more
+	
+	 num     #instances         #bytes  class name
+	----------------------------------------------
+	   1:        190946       32397944  [C
+	   2:          4484        8992432  [B
+	   3:         60531        5810976  java.util.jar.JarFile$JarFileEntry
+	   4:        188583        4525992  java.lang.String
+	   5:        129012        4128384  java.util.HashMap$Node
+	   6:         30239        2661032  java.lang.reflect.Method
+	   7:         16534        2338104  [Ljava.util.HashMap$Node;
+	   8:         43702        1398464  java.util.concurrent.ConcurrentHashMap$Node
+	   9:         25462        1393696  [Ljava.lang.Object;
+	  10:         12469        1293568  java.lang.Class
+	  11:         18321         732840  java.util.LinkedHashMap$Entry
+	  12:          9875         632000  java.net.URL
+
 ## jmap -dump:format=b,file=heapdump 2730
 将内存使用的详细情况输出到文件
 
@@ -378,3 +397,5 @@ FULL GC后的堆
 	   17.524887084960938% used
 	
 	10302 interned Strings occupying 946472 bytes.
+
+
