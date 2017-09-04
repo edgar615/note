@@ -1,0 +1,425 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+<title>测试环境的搭建</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<style>
+body { font:80% Verdana,Tahoma,Arial,sans-serif; }
+h1, h2, h3, h4 {  font-family: "Trebuchet MS",Georgia,"Times New Roman",serif; }
+ul.toc { padding: 4px; margin-left: 0; }
+ul.toc li { list-style-type:none; }
+ul.toc li.heading2 { margin-left: 1em; }
+ul.toc li.heading3 { margin-left: 2em; }
+a.wiki-anchor { display: none; margin-left: 6px; text-decoration: none; }
+a.wiki-anchor:hover { color: #aaa !important; text-decoration: none; }
+h1:hover a.wiki-anchor, h2:hover a.wiki-anchor, h3:hover a.wiki-anchor { display: inline; color: #ddd; }
+</style>
+</head>
+<body>
+<a name="测试环境的搭建"></a>
+<h1 >测试环境的搭建<a href="#测试环境的搭建" class="wiki-anchor">&para;</a></h1>
+
+<p>三台测试服务器：10.4.7.220,10.4.7.221,10.4.7.222</p>
+
+<a name="安装Zookeeper"></a>
+<h2 >安装Zookeeper<a href="#安装Zookeeper" class="wiki-anchor">&para;</a></h2>
+
+<p>docker的集群、微服务的集群均采用zookeeper来实现</p>
+
+<a name="1安装JDK"></a>
+<h3 >1.安装JDK<a href="#1安装JDK" class="wiki-anchor">&para;</a></h3>
+
+<p>网络原因，直接使用已经下载好的JDK安装<br>
+1) 解压JDK<br>
+<code>tar -zx -f jdk-8u20-linux-x64.tar.gz -C /server</code><br>
+2) 修改/etc/profile，在文件末尾加上<br>
+<code><br>
+JAVA_HOME=/server/jdk1.8.0_20<br>
+CLASSPAHH=.:$JAVA_HOME/lib/tools.jar:$JAVA_HOME/lib/dt.jar<br>
+PATH=$JAVA_HOME/bin:$PATH<br>
+export JAVA_HOME CLASSPATH PAT<br>
+</code><br>
+3)运行<br>
+<code>source /etc/profile<br>
+</code><br>
+4)检查是否安装成功<br>
+<code>java version</code></p>
+
+<a name="2安装zookeeper"></a>
+<h3 >2.安装zookeeper<a href="#2安装zookeeper" class="wiki-anchor">&para;</a></h3>
+
+<p>1) 解压zookeeper<br>
+<code>tar -zx -f zookeeper-3.5.1-alpha.tar.gz</code><br>
+2)分别在220、221、222执行下列脚本<br>
+220<br>
+<code><br>
+cp ./conf/zoo_sample.cfg ./conf/zoo.cfg<br>
+echo &quot;standaloneEnabled=false&quot; &gt;&gt; ./conf/zoo.cfg;<br>
+echo &quot;dynamicConfigFile=/home/csst/zookeeper-3.5.1-alpha/conf/zoo.cfg.dynamic&quot; &gt;&gt; ./conf/zoo.cfg;<br>
+echo &quot;server.1=10.4.7.220:2888:3888;2181&quot; &gt;&gt; ./conf/zoo.cfg.dynamic<br>
+./bin/zkServer-initialize.sh --force --myid=1<br>
+./bin/zkServer.sh start<br>
+</code></p>
+
+<p>221<br>
+<code><br>
+cp ./conf/zoo_sample.cfg ./conf/zoo.cfg<br>
+echo &quot;standaloneEnabled=false&quot; &gt;&gt; ./conf/zoo.cfg;<br>
+echo &quot;dynamicConfigFile=/home/csst/zookeeper-3.5.1-alpha/conf/zoo.cfg.dynamic&quot; &gt;&gt; ./conf/zoo.cfg;<br>
+output=$(./bin/zkCli.sh -server 10.4.7.220:2181 get /zookeeper/config | grep ^server)<br>
+echo $output &gt;&gt; ./conf/zoo.cfg.dynamic<br>
+echo &quot;server.2=10.4.7.221:2888:3888:observer;2181&quot; &gt;&gt; ./conf/zoo.cfg.dynamic<br>
+cp ./conf/zoo.cfg.dynamic ./conf/zoo.cfg.dynamic.org<br>
+./bin/zkServer-initialize.sh --force --myid=2<br>
+./bin/zkServer.sh start<br>
+ ./bin/zkCli.sh -server 10.4.7.220:2181 reconfig -add &quot;server.2=10.4.7.221:2888:3888:participant;2181&quot;<br>
+./bin/zkServer.sh stop<br>
+./bin/zkServer.sh start<br>
+</code></p>
+
+<p>222<br>
+<code><br>
+cp ./conf/zoo_sample.cfg ./conf/zoo.cfg<br>
+echo &quot;standaloneEnabled=false&quot; &gt;&gt; ./conf/zoo.cfg;<br>
+echo &quot;dynamicConfigFile=/home/csst/zookeeper-3.5.1-alpha/conf/zoo.cfg.dynamic&quot; &gt;&gt; ./conf/zoo.cfg;<br>
+output=$(./bin/zkCli.sh -server 10.4.7.220:2181 get /zookeeper/config | grep ^server)<br>
+echo $output &gt;&gt; ./conf/zoo.cfg.dynamic<br>
+echo &quot;server.3=10.4.7.222:2888:3888:observer;2181&quot; &gt;&gt; ./conf/zoo.cfg.dynamic<br>
+cp ./conf/zoo.cfg.dynamic ./conf/zoo.cfg.dynamic.org<br>
+./bin/zkServer-initialize.sh --force --myid=3<br>
+./bin/zkServer.sh start<br>
+ ./bin/zkCli.sh -server 10.4.7.220:2181 reconfig -add &quot;server.3=10.4.7.222:2888:3888:participant;2181&quot;<br>
+./bin/zkServer.sh stop<br>
+./bin/zkServer.sh start<br>
+</code></p>
+
+<p>3.检查集群配置<br>
+在任意一台服务器上执行<br>
+<code>./bin/zkCli.sh -server $ZK:2181 get /zookeeper/config | grep ^server</code><br>
+会看到如下输出<br>
+<code><br>
+server.1=10.4.7.220:2888:3888:participant;0.0.0.0:2181<br>
+server.2=10.4.7.221:2888:3888:participant;0.0.0.0:2181<br>
+server.3=10.4.7.222:2888:3888:participant;0.0.0.0:2181<br>
+</code></p>
+
+<a name="安装docker"></a>
+<h2 >安装docker<a href="#安装docker" class="wiki-anchor">&para;</a></h2>
+
+<a name="1添加源"></a>
+<h3 >1.添加源<a href="#1添加源" class="wiki-anchor">&para;</a></h3>
+<pre>sudo sh -c &quot;echo deb https://get.docker.com/ubuntu docker main &gt; /etc/apt/sources.list.d/docker.list&quot;
+</pre>
+<a name="2添加gpg-key"></a>
+<h3 >2.添加gpg key<a href="#2添加gpg-key" class="wiki-anchor">&para;</a></h3>
+<pre>sudo apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
+</pre>
+<a name="3更新软件源"></a>
+<h3 >3.更新软件源<a href="#3更新软件源" class="wiki-anchor">&para;</a></h3>
+<pre>sudo apt-get update  
+</pre>
+<p><strong>这步可能会报错，多数情况下都是第二步导致的，可以根据错误再网上搜索下解决方法</strong></p>
+
+<a name="4安装docker"></a>
+<h3 >4.安装docker<a href="#4安装docker" class="wiki-anchor">&para;</a></h3>
+<pre>sudo apt-get install lxc-docker  
+</pre>
+<a name="5测试docker是否安装"></a>
+<h3 >5.测试docker是否安装<a href="#5测试docker是否安装" class="wiki-anchor">&para;</a></h3>
+<pre>sudo docker version
+</pre>
+<a name="6配置docker连接私有仓库"></a>
+<h3 >6.配置docker，连接私有仓库<a href="#6配置docker连接私有仓库" class="wiki-anchor">&para;</a></h3>
+
+<p>在/etc/default/docker中增加</p>
+<pre>DOCKER_OPTS=&quot;$DOCKER_OPTS --insecure-registry=10.4.7.48:5000&quot;
+</pre>
+<a name="7配置用户权限避免每次都使用sudo"></a>
+<h3 >7.配置用户权限，避免每次都使用sudo<a href="#7配置用户权限避免每次都使用sudo" class="wiki-anchor">&para;</a></h3>
+<pre># 添加一个新的docker用户组
+sudo groupadd docker
+# 添加当前用户到docker用户组里，注意这里的csst为ubuntu server登录用户名
+sudo gpasswd -a csst docker
+# 重启Docker后台监护进程(或者直接重启电脑)
+sudo service docker restart
+</pre>
+<a name="安装Swarm"></a>
+<h2 >安装Swarm<a href="#安装Swarm" class="wiki-anchor">&para;</a></h2>
+
+<p>采用Swarm来实现docker的集群和多主机网络管理</p>
+
+<a name="1修改DOCKER_OPS"></a>
+<h3 >1.修改DOCKER_OPS<a href="#1修改DOCKER_OPS" class="wiki-anchor">&para;</a></h3>
+
+<p><code>DOCKER_OPTS=&quot;$DOCKER_OPTS --cluster-store=zk://10.4.7.220:2181,10.4.7.221:2181,10.4.7.222:2181 --cluster-advertise=eth0:2376 -H 0.0.0.0:2375 -H unix:///var/run/docker.sock --insecure-registry=10.4.7.48:5000&quot;</code><br>
+<strong>eth0</strong>表示对应的网卡，不同的集群该值可能不同</p>
+
+<p><strong>--cluster-store=zk://10.4.7.220:2181,10.4.7.221:2181,10.4.7.222:2181 --cluster-advertise=eth0:2376</strong>是实现多主机网络需要的配置，如果不需要多主机网络，可以忽略此项配置</p>
+
+<a name="2重启docker"></a>
+<h3 >2.重启docker<a href="#2重启docker" class="wiki-anchor">&para;</a></h3>
+
+<p><code>sudo service docker restart</code></p>
+
+<a name="3在三台服务器上分别执行下列脚本"></a>
+<h3 >3.在三台服务器上分别执行下列脚本：<a href="#3在三台服务器上分别执行下列脚本" class="wiki-anchor">&para;</a></h3>
+
+<p><strong>由于网速较慢，我们直接使用已经下好的swarm镜像</strong><br>
+220<br>
+<code><br>
+curl -L http://10.4.7.232/redmine/attachments/download/211/swarm.tar -O<br>
+docker load &lt; swarm.tar<br>
+docker run -d swarm join --advertise=10.4.7.220:2375 zk://10.4.7.220:2181,10.4.7.221:2181,10.4.7.222:2181<br>
+</code><br>
+221<br>
+<code><br>
+curl -L http://10.4.7.232/redmine/attachments/download/211/swarm.tar -O<br>
+docker load &lt; swarm.tar<br>
+docker run -d swarm join --advertise=10.4.7.221:2375 zk://10.4.7.220:2181,10.4.7.221:2181,10.4.7.222:2181<br>
+</code><br>
+222<br>
+<code><br>
+curl -L http://10.4.7.232/redmine/attachments/download/211/swarm.tar -O<br>
+docker load &lt; swarm.tar<br>
+docker run -d swarm join --advertise=10.4.7.222:2375 zk://10.4.7.220:2181,10.4.7.221:2181,10.4.7.222:2181<br>
+</code></p>
+
+<a name="3选择一台服务器做管理节点执行下列脚本"></a>
+<h3 >3.选择一台服务器做管理节点，执行下列脚本<a href="#3选择一台服务器做管理节点执行下列脚本" class="wiki-anchor">&para;</a></h3>
+
+<p>我们选择220<br>
+<code>docker run -d -p 2376:2375 swarm manage zk://10.4.7.220:2181,10.4.7.221:2181,10.4.7.222:2181</code></p>
+
+<a name="4检查集群配置"></a>
+<h3 >4.检查集群配置<a href="#4检查集群配置" class="wiki-anchor">&para;</a></h3>
+
+<p>在任意一台服务器上执行下列脚本：<br>
+<code>docker run --rm swarm list zk://10.4.7.220:2181,10.4.7.221:2181,10.4.7.222:2181</code><br>
+我们会看到如下输出<br>
+<code><br>
+10.4.7.221:2375<br>
+10.4.7.222:2375<br>
+10.4.7.220:2375<br>
+</code></p>
+
+<a name="5以后我们就可以在任意一台服务器上执行命令例如"></a>
+<h3 >5.以后我们就可以在任意一台服务器上执行命令，例如：<a href="#5以后我们就可以在任意一台服务器上执行命令例如" class="wiki-anchor">&para;</a></h3>
+
+<p><code>docker -H tcp://10.4.7.220:2376 info<br>
+docker -H tcp://10.4.7.220:2376 run ...<br>
+docker -H tcp://10.4.7.220:2376 ps<br>
+docker -H tcp://10.4.7.220:2376 logs ...</code></p>
+
+<p><code>docker -H tcp://10.4.7.220:2376 info</code><br>
+我们会看到如下输出<br>
+<code><br>
+Containers: 6<br>
+Images: 10<br>
+Role: primary<br>
+Strategy: spread<br>
+Filters: health, port, dependency, affinity, constraint<br>
+Nodes: 3<br>
+ ubuntu220: 10.4.7.220:2375<br>
+  ?.Containers: 2<br>
+  ?.Reserved CPUs: 0 / 4<br>
+  ?.Reserved Memory: 0 B / 3.968 GiB<br>
+  ?.Labels: executiondriver=native-0.2, kernelversion=3.13.0-32-generic, operatingsystem=Ubuntu 14.04.1 LTS, storagedriver=aufs<br>
+ ubuntu221: 10.4.7.221:2375<br>
+  ?.Containers: 1<br>
+  ?.Reserved CPUs: 0 / 4<br>
+  ?.Reserved Memory: 0 B / 3.944 GiB<br>
+  ?.Labels: executiondriver=native-0.2, kernelversion=3.13.0-32-generic, operatingsystem=Ubuntu 14.04.1 LTS, storagedriver=aufs<br>
+ ubuntu222: 10.4.7.222:2375<br>
+  ?.Containers: 3<br>
+  ?.Reserved CPUs: 0 / 4<br>
+  ?.Reserved Memory: 0 B / 3.944 GiB<br>
+  ?.Labels: executiondriver=native-0.2, kernelversion=3.13.0-32-generic, operatingsystem=Ubuntu 14.04.1 LTS, storagedriver=aufs<br>
+CPUs: 12<br>
+Total Memory: 11.86 GiB<br>
+Name: e8dc154e1a88<br>
+</code></p>
+
+<a name="基于Swarm建立跨主机网络"></a>
+<h2 >基于Swarm建立跨主机网络<a href="#基于Swarm建立跨主机网络" class="wiki-anchor">&para;</a></h2>
+
+<a name="1检查当前系统的kernel版本如果低于316先升级kernel"></a>
+<h3 >1.检查当前系统的kernel版本，如果低于3.16，先升级kernel<a href="#1检查当前系统的kernel版本如果低于316先升级kernel" class="wiki-anchor">&para;</a></h3>
+
+<p><code>uname -a</code><br>
+输出<br>
+<code>Linux ubuntu220 3.13.0-32-generic #57-Ubuntu SMP Tue Jul 15 03:51:08 UTC 2014 x86_64 x86_64 x86_64 GNU/Linux</code><br>
+kernel 版本过低，需要升级<br>
+查询kernel版本：<br>
+<code>apt-cache search linux-generic-lts</code><br>
+升级<br>
+<code>sudo apt-get install linux-generic-lts-utopic</code><br>
+重启后次检查kernel版本<br>
+<code>Linux ubuntu220 3.16.0-55-generic #74~14.04.1-Ubuntu SMP Tue Nov 17 10:15:59 UTC 2015 x86_64 x86_64 x86_64 GNU/Linux</code></p>
+
+<a name="2检查当前的网络设置"></a>
+<h3 >2.检查当前的网络设置<a href="#2检查当前的网络设置" class="wiki-anchor">&para;</a></h3>
+
+<p><code>docker -H tcp://10.4.7.220:2376 network ls</code><br>
+输出<br>
+<code><br>
+NETWORK ID          NAME                DRIVER<br>
+de3c8e3e5368        ubuntu222/host      host                <br>
+01272413c33b        ubuntu221/bridge    bridge              <br>
+7ae23fb89719        ubuntu220/none      null                <br>
+710b0385e571        ubuntu222/bridge    bridge              <br>
+94cd20053536        ubuntu222/none      null                <br>
+05ee3280a709        ubuntu220/bridge    bridge              <br>
+a13751eb41e7        ubuntu220/host      host                <br>
+821921c4f2dd        ubuntu221/none      null                <br>
+5877cff5c839        ubuntu221/host      host<br>
+</code></p>
+
+<a name="3创建一个新的overlay网络swarm_network"></a>
+<h3 >3.创建一个新的overlay网络:swarm_network<a href="#3创建一个新的overlay网络swarm_network" class="wiki-anchor">&para;</a></h3>
+
+<p><code>docker -H tcp://10.4.7.220:2376 network create swarm_network</code><br>
+再次运行步骤1的脚本，会发现多了一个swarm_network的网络</p>
+
+<p><code><br>
+NETWORK ID          NAME                DRIVER<br>
+05ee3280a709        ubuntu220/bridge    bridge              <br>
+a13751eb41e7        ubuntu220/host      host                <br>
+6b5772fba8f2        swarm_network       overlay             <br>
+94cd20053536        ubuntu222/none      null                <br>
+de3c8e3e5368        ubuntu222/host      host                <br>
+01272413c33b        ubuntu221/bridge    bridge              <br>
+821921c4f2dd        ubuntu221/none      null                <br>
+710b0385e571        ubuntu222/bridge    bridge              <br>
+5877cff5c839        ubuntu221/host      host                <br>
+7ae23fb89719        ubuntu220/none      null<br>
+</code></p>
+
+<a name="4启动三个ubuntu容器"></a>
+<h3 >4.启动三个ubuntu容器<a href="#4启动三个ubuntu容器" class="wiki-anchor">&para;</a></h3>
+
+<p><code>docker -H tcp://10.4.7.220:2376 run -it --rm --net swarm_network 10.4.7.48:5000/csst/ubuntu /bin/bash</code><br>
+分别查看他们的ip<br>
+<code>ip a</code><br>
+三个docker容器的eth0网卡的IP分别为<br>
+10.0.0.2<br>
+10.0.0.3<br>
+10.0.0.4<br>
+并且可以相互ping通</p>
+
+<a name="启动zookeeper容器"></a>
+<h2 >启动zookeeper容器<a href="#启动zookeeper容器" class="wiki-anchor">&para;</a></h2>
+
+<p>虽然我们在第一步就在三台服务器上分别安装了Zookeeper，但为了扩展zookeeper更方便，除Swarm外，其他的程序我们使用zookeeper的docker容器</p>
+
+<a name="1启动第一个zookeeper容器"></a>
+<h3 >1.启动第一个zookeeper容器<a href="#1启动第一个zookeeper容器" class="wiki-anchor">&para;</a></h3>
+<pre>docker -H tcp://10.4.7.220:2376 run -d -P --net swarm_network --name zookeeper1 10.4.7.48:5000/csst/zookeeper:3.5.1-alpha
+</pre>
+<a name="2通过docker-logs-zookeeper1查找到eth0网卡的IP为10002"></a>
+<h3 >2.通过docker logs zookeeper1查找到eth0网卡的IP为10.0.0.2<a href="#2通过docker-logs-zookeeper1查找到eth0网卡的IP为10002" class="wiki-anchor">&para;</a></h3>
+
+<p><code><br>
+docker -H tcp://10.4.7.220:2376 logs zookeeper1 | grep &#39;ip addr&#39;<br>
+</code></p>
+
+<a name="3启动剩下的镜像zookeeper镜像至少要有3个"></a>
+<h3 >3.启动剩下的镜像（zookeeper镜像至少要有3个）<a href="#3启动剩下的镜像zookeeper镜像至少要有3个" class="wiki-anchor">&para;</a></h3>
+<pre>docker -H tcp://10.4.7.220:2376 run -d -P --net swarm_network --name zookeeper2 10.4.7.48:5000/csst/zookeeper:3.5.1-alpha -h 10.0.0.2
+docker -H tcp://10.4.7.220:2376 run -d -P --net swarm_network --name zookeeper3 10.4.7.48:5000/csst/zookeeper:3.5.1-alpha -h 10.0.0.2
+</pre>
+<a name="4通过步骤2查找每个zookeeper容器的ip"></a>
+<h3 >4.通过步骤2查找每个zookeeper容器的ip<a href="#4通过步骤2查找每个zookeeper容器的ip" class="wiki-anchor">&para;</a></h3>
+
+<p>zookeeper2: 10.0.0.3<br>
+zookeeper3: 10.0.0.4</p>
+
+<p>整个应用的zookeeper连接串为：10.0.0.2:2181,10.0.0.3:2181,10.0.0.4:2181<br>
+<strong>注意：这个连接串只能在swarm_network下工作</strong></p>
+
+<a name="启动kafka容器"></a>
+<h2 >启动kafka容器<a href="#启动kafka容器" class="wiki-anchor">&para;</a></h2>
+
+<a name="1启动第一个Kafka容器"></a>
+<h3 >1.启动第一个Kafka容器<a href="#1启动第一个Kafka容器" class="wiki-anchor">&para;</a></h3>
+
+<p><code>docker -H tcp://10.4.7.220:2376 run -d -P --net swarm_network --name kafka1 10.4.7.48:5000/csst/kafka:0.9_2.11 -z 10.0.0.2:2181,10.0.0.3:2181,10.0.0.4:2181</code></p>
+
+<a name="2启动剩下的Kafka容器"></a>
+<h3 >2.启动剩下的Kafka容器<a href="#2启动剩下的Kafka容器" class="wiki-anchor">&para;</a></h3>
+
+<p><code>docker -H tcp://10.4.7.220:2376 run -d -P --net swarm_network --name kafka2 10.4.7.48:5000/csst/kafka:0.9_2.11 -z 10.0.0.2:2181,10.0.0.3:2181,10.0.0.4:2181 -b<br>
+docker -H tcp://10.4.7.220:2376 run -d -P --net swarm_network --name kafka3 10.4.7.48:5000/csst/kafka:0.9_2.11 -z 10.0.0.2:2181,10.0.0.3:2181,10.0.0.4:2181 -b</code><br>
+<strong>需要带-b参数，容器启动时会自动计算kafka的id</strong></p>
+
+<a name="3执行命令查找每个Kafka容器的IP"></a>
+<h3 >3.执行命令查找每个Kafka容器的IP<a href="#3执行命令查找每个Kafka容器的IP" class="wiki-anchor">&para;</a></h3>
+
+<p><code>docker -H tcp://10.4.7.220:2376 logs kafka1 | grep &#39;ip addr&#39;</code><br>
+得到kafka的连接串：10.0.0.5:9092,10.0.0.6:9092,10.0.0.7:9092<br>
+<strong>注意：这个连接串只能在swarm_network下工作</strong></p>
+
+<a name="启动服务"></a>
+<h2 >启动服务<a href="#启动服务" class="wiki-anchor">&para;</a></h2>
+
+<a name="启动数据库镜像"></a>
+<h3 >启动数据库镜像<a href="#启动数据库镜像" class="wiki-anchor">&para;</a></h3>
+
+<p>由于数据库比较特殊，并没有将每个服务的数据库制作成不同的镜像，而是统一使用MySQL镜像启动</p>
+
+<p>这里只以任务服务做例子：</p>
+
+<a name="下载各个服务的数据库脚本"></a>
+<h4 >下载各个服务的数据库脚本<a href="#下载各个服务的数据库脚本" class="wiki-anchor">&para;</a></h4>
+
+<p><code>curl -L http://10.4.7.232/redmine/attachments/download/215/task_table.sql -O<br>
+curl -L http://10.4.7.232/redmine/attachments/download/216/task_data.sql -O</code></p>
+
+<a name="将数据库脚本合并成一个"></a>
+<h4 >将数据库脚本合并成一个<a href="#将数据库脚本合并成一个" class="wiki-anchor">&para;</a></h4>
+
+<p><code>cat task_table.sql task_data.sql &gt; task.sql</code></p>
+
+<a name="启动各个服务的数据库"></a>
+<h4 >启动各个服务的数据库<a href="#启动各个服务的数据库" class="wiki-anchor">&para;</a></h4>
+
+<p>任务<br>
+<code>docker -H tcp://10.4.7.220:2376 run -d -P -v /data/mysql/task:/var/lib/mysql -v /home/csst/task.sql:/task.sql  -e MYSQL_PASS=&quot;csst&quot; -e ON_CREATE_DB=&quot;task&quot; -e EXTRA_OPTS=&quot;--lower_case_table_names=1&quot; -e STARTUP_SQL=&quot;/task.sql&quot; --net swarm_network --name mysql-task  10.4.7.48:5000/csst/mysql</code></p>
+
+<p><strong>数据库的用户名是admin，密码是我们通过-e MYSQL_PASS=&quot;csst&quot;指定的，如果没有指定，容器启动的时候会自动生成一个随机密码</strong><br>
+通过<code>docker -H tcp://10.4.7.220:2376 logs mysql_task | grep &#39;mysql -uadmin&#39;</code>可以查看到数据库的密码<br>
+mysql -uadmin -pcsst -h -P</p>
+
+<a name="因为在构建MySQL镜像的时候并未考虑网络问题并未在日志中输出IP所以只能通过docker的其他命令获取mysql的ip"></a>
+<h4 >因为在构建MySQL镜像的时候并未考虑网络问题，并未在日志中输出IP，所以只能通过docker的其他命令获取mysql的ip<a href="#因为在构建MySQL镜像的时候并未考虑网络问题并未在日志中输出IP所以只能通过docker的其他命令获取mysql的ip" class="wiki-anchor">&para;</a></h4>
+
+<p><code>docker -H tcp://10.4.7.220:2376 inspect -f &#39;{{.NetworkSettings.Networks.swarm_network.IPAddress}}&#39; mysql-task</code><br>
+输出mysql-task的IP<br>
+10.0.0.8<br>
+<strong>注意：这个IP只能在swarm_network下工作</strong>，如果想在其他网络环境下访问这个数据库需要执行下面的脚本找到映射的IP端口:<br>
+<code>docker -H tcp://10.4.7.220:2376 port mysql-task</code><br>
+输出<br>
+<code>3306/tcp -&gt; 10.4.7.222:32790</code><br>
+我们就可以通过10.4.7.222:32790来访问这个数据库</p>
+
+<p>其他服务的数据库的启动与上面相同，由于目前只是测试，暂时将所有数据库都放在一起。</p>
+
+<a name="启动各个微服务的容器"></a>
+<h3 >启动各个微服务的容器<a href="#启动各个微服务的容器" class="wiki-anchor">&para;</a></h3>
+
+<ol>
+<li>这里只介绍启动任务服务
+执行下面命令
+<code>docker -H tcp://10.4.7.220:2376 run -d -P --net swarm_network --name task1 10.4.7.48:5000/csst/task-service:345 --zk.connect=10.0.0.2:2181,10.0.0.3:2181,10.0.0.4:2181 --kafka.bootstrap.servers=10.0.0.5:9092,10.0.0.6:9092,10.0.0.7:9092 --mysql.port=10.0.0.8:3306</code></li>
+</ol>
+
+<p><strong>由于配置管理尚未实现，数据库，kafka等配置需要在启动容器时指明连接地址</strong></p>
+
+<p>我们可以任意启动多个服务<br>
+<code>docker -H tcp://10.4.7.220:2376 run -d -P --net swarm_network --name task3 10.4.7.48:5000/csst/task-service:345 --zk.connect=10.0.0.2:2181,10.0.0.3:2181,10.0.0.4:2181 --kafka.bootstrap.servers=10.0.0.5:9092,10.0.0.6:9092,10.0.0.7:9092 --mysql.port=10.0.0.8:3306</code></p>
+
+<p>2.启动API网关<br>
+由于API网关的集群尚未实现，目前只启动一个API网关容器<br>
+<code>docker -H tcp://10.4.7.220:2376 run -d -P --net swarm_network --name api1 10.4.7.48:5000/csst/api-gateway:346 --zk.connect=10.0.0.2:2181,10.0.0.3:2181,10.0.0.4:2181 --kafka.bootstrap.servers=10.0.0.5:9092,10.0.0.6:9092,10.0.0.7:9092 --server.port=8080</code></p>
+
+</body>
+</html>

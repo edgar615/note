@@ -1,0 +1,1 @@
+docker -H tcp://10.11.0.31:2376 run -d -P -e DEST="10.0.0.6:3306,10.0.0.18:3306" --net swarm_network --name mysql-router 10.4.7.48:5000/mysql-router:test

@@ -1,0 +1,109 @@
+
+
+1.
+DOCKER_OPTS="$DOCKER_OPTS -H 0.0.0.0:2375 -H unix:///var/run/docker.sock --insecure-registry=10.4.7.48:5000"
+
+2.任意一台机器
+docker run --rm swarm create
+记住返回的token：d043c9dfa0a40495d84c2b0d081d309d
+
+3.每台机器，分别加入集群
+docker run -d swarm join addr=ip_address:2375 token://token_id
+ip_address为本机IP
+
+4.选一台机器做manager,启动swarm manager
+docker run -d -p 2376:2375 swarm manage token://token_id
+
+任意一台机器上检查服务器中的节点
+docker run --rm swarm list token://token_id
+输出结果列出的IP地址正是我们使用 swarm join 命令加入集群的机器的IP地址。
+192.168.149.136:2375
+192.168.149.138:2375
+
+5.检查配置
+docker -H tcp://<manager_ip:manager_port> info
+输出
+Containers: 6
+Images: 22
+Role: primary
+Strategy: spread
+Filters: health, port, dependency, affinity, constraint
+Nodes: 2
+ adonis-virtual-machine: 192.168.149.138:2375
+  └ Containers: 3
+  └ Reserved CPUs: 0 / 1
+  └ Reserved Memory: 0 B / 506.9 MiB
+  └ Labels: executiondriver=native-0.2, kernelversion=3.16.0-30-generic, operatingsystem=Ubuntu 14.04.2 LTS, storagedriver=aufs
+ edgar-virtual-machine: 192.168.149.136:2375
+  └ Containers: 3
+  └ Reserved CPUs: 0 / 1
+  └ Reserved Memory: 0 B / 1.012 GiB
+  └ Labels: executiondriver=native-0.2, kernelversion=3.16.0-30-generic, operatingsystem=Ubuntu 14.04.2 LTS, storagedriver=aufs
+CPUs: 2
+Total Memory: 1.507 GiB
+Name: ece7ef8f9b6b
+
+6.docker cli
+docker -H tcp://<manager_ip:manager_port> info
+docker -H tcp://<manager_ip:manager_port> run ...
+docker -H tcp://<manager_ip:manager_port> ps
+docker -H tcp://<manager_ip:manager_port> logs ...
+
+8.List nodes in your cluster
+docker run --rm swarm list token://<cluster_id>
+
+7.swarm策略
+sudo docker run -d -p 2376:2375 -v $(pwd)/cluster:/tmp/cluster swarm manage --strategy=spread file:///tmp/cluster
+
+swarm支持多种调度策略来选择节点。每次在swarm启动container的时候，swarm会根据选择的调度策略来选择节点运行container。目前支持的有:spread,binpack和random。
+
+在执行swarm manage命令启动 swarm 集群的时候可以通过 --strategy 参数来指定，默认的是spread。
+
+spread和binpack策略会根据每台节点的可用CPU，内存以及正在运行的containers的数量来给各个节点分级，而random策略，顾名思义，他不会做任何的计算，只是单纯的随机选择一个节点来启动container。这种策略一般只做调试用。
+
+使用spread策略，swarm会选择一个正在运行的container的数量最少的那个节点来运行container。这种情况会导致启动的container会尽可能的分布在不同的机器上运行，这样的好处就是如果有节点坏掉的时候不会损失太多的container。
+
+binpack 则相反，这种情况下，swarm会尽可能的把所有的容器放在一台节点上面运行。这种策略会避免容器碎片化，因为他会把未使用的机器分配给更大的容器，带来的好处就是swarm会使用最少的节点运行最多的容器。
+
+
+8.使用文件实现服务发现功能
+1) 在管理节点执行
+echo <node_ip1:2375> >> /tmp/my_cluster
+echo <node_ip2:2375> >> /tmp/my_cluster
+echo <node_ip3:2375> >> /tmp/my_cluster
+2)在管理节点启动
+docker run -d -p 2376:2375 -v /tmp/my_cluster:/tmp/cluster swarm manage file:///tmp/cluster
+3)检查配置
+docker -H tcp://<manager_ip:manager_port> info
+
+9.Using zookeeper
+每个节点
+docker run -d swarm join --advertise=<node_ip:2375> zk://<zookeeper_addr1>,<zookeeper_addr2>/<optional path prefix>
+管理节点
+docker run -d -p 2376:2375 swarm manage zk://<zookeeper_addr1>,<zookeeper_addr2>/<optional path prefix>
+列出节点
+docker run --rm swarm list zk://<zookeeper_addr1>,<zookeeper_addr2>/<optional path prefix>
+
+10.Using consul
+swarm join --advertise=<node_ip:2375> consul://<consul_addr>/<optional path prefix>
+
+swarm manage -H tcp://<swarm_ip:swarm_port> consul://<consul_addr>/<optional path prefix>
+
+11.网络
+To use multi-host networking you need to start your docker engines with --cluster-store and --cluster-advertise as indicated in the docker engine docs
+DOCKER_OPTS="$DOCKER_OPTS --cluster-store=zk://192.168.149.136:2181 --cluster-advertise=eth0:2376 -H 0.0.0.0:2375 -H unix:///var/run/docker.sock --insecure-registry=10.4.7.48:5000"
+
+创建网卡
+docker -H tcp://192.168.149.136:2376 network create swarm_network
+运行镜像
+docker run -it --name a1 --net swarm_network 10.4.7.48:5000/csst/ubuntu /bin/bash
+检查网络：
+eth0
+
+在使用swarm的过程中经常遇见下面的错误；
+error creating vxlan interface: file exists
+解决方法：
+sudo umount /var/run/docker/netns/*
+sudo rm /var/run/docker/netns/*
+
+https://github.com/docker/libnetwork/issues/562
