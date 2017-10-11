@@ -3,7 +3,8 @@
 https://developer.github.com/v3
 http://www.vinaysahni.com/best-practices-for-a-pragmatic-restful-api
 https://github.com/bolasblack/http-api-guide#user-content-http-%E5%8D%8F%E8%AE%AE
-
+http://www.infoq.com/cn/news/2017/09/How-versioning-API
+http://www.lexicalscope.com/blog/2012/03/12/how-are-rest-apis-versioned/
 
 # HTTP动词
 
@@ -115,14 +116,27 @@ https://zh.wikipedia.org/wiki/ISO_8601
 # API版本
 http://stackoverflow.com/questions/389169/best-practices-for-api-versioning
 
-应该将API的版本号放入URL。
-
-	https://api.example.com/v{n}/
-
-采用多版本并存，增量发布的方式
-v{n} n代表版本号,分为整形和浮点型
-整形的版本号: 大功能版本发布形式；具有当前版本状态下的所有API接口 ,例如：v1,v2
-浮点型：为小版本号，只具备补充api的功能，其他api都默认调用对应大版本号的api 例如：v1.1 v2.2
+系统在发展的过程中，不可避免的需要添加新的API，或者修改现有API。一旦API已经发布，那么对API的任何改动都需要考虑对当前用户的影响，因此建议API服务使用API版本号来实现API的版本控制策略。
+版本控制在业内有三种做法：
+（1）在URI中直接标记使用的是哪个版本，无版本号URI默认使用最新版本。
+https://api.example.com/v1/api
+https://api.example.com/api
+（2）在每个请求后添加一个version参数，表示请求的是哪个版本。
+https://api.example.com/api?version=1
+（3）在HTTP请求的header中使用Media Type标记使用的是哪个版本， 无版本号表示最新版本的API。
+curl https://example.com/api/lists/3 \  
+-H ' x-api-version: v1' （自定义的Header）
+curl https://example.com/api/lists/3 \  
+-H 'Accept: application/vnd.example.v2+json' （vendor MIME media type）
+根据上面的API版本策略，在参考了一些开放平台的API版本后，我们采用下面的方式进行版本控制。
+将API的的版本号分为两种
+（1）主版本（Major Version）：大版本更新，对业务改动较大，无法满足对调用方的向下兼容，强制调用方升级，因此需要修改版本号。版本号只能使用整数，并放入URL中
+https://api.example.com/v1
+https://api.example.com/v2
+（2）小版本（Minor Version）：小版本号，对于业务改动较小，可以在业务逻辑里按版本号进行区分。版本号只能是yyyyMMdd的日期格式，可以将版本号放入 header中
+curl https://example.com/api/lists/3 \  
+-H ' x-api-version: 20171011'
+注意：对API的历史版本支持一定要有时间和用户限制，老版本的API支持到一定时间就删除，新用户必须使用新版API，否则一个API多个版本会大大增加平台的维护工作量。
 
 
 # 限流
