@@ -42,6 +42,10 @@
 <td>消息产生时间戳</td>
 </tr>
 <tr>
+<td>duration</td>
+<td>消息的有效时间，单位秒</td>
+</tr>
+<tr>
 <td>ext-${xxx}</td>
 <td>扩展字段</td>
 </tr>
