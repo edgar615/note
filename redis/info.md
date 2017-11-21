@@ -142,23 +142,36 @@ replication : 主/从复制信息
 
     # Replication
     role:master #如果当前服务器没有在复制任何其他服务器，那么这个域的值就是 master ；否则的话，这个域的值就是 slave 。注意，在创建复制链的时候，一个从服务器也可能是另一个服务器的主服务器。
-    connected_slaves:0 #已连接的从服务器数量。
-    master_replid:f5bb93311ab41962cf13d3f9fa69b951c5cf674c
+    connected_slaves:1 #已连接的从服务器数量。
+    slave0:ip=127.0.0.1,port=6380,state=online,offset=690,lag=0 #从服务器的IP、断开，状态、复制偏移量，lag是与从节点最后一次通信延迟的秒数，正常延迟应该在0和1之间
+    master_replid:d7ffc06a335aa6d77dad778b8b3088d6e1212fbd #运行ID，40位的16进制字符串，用来识别redis节点
     master_replid2:0000000000000000000000000000000000000000
-    master_repl_offset:0
+    master_repl_offset:690 #主节点的命令偏移量
     second_repl_offset:-1
-    repl_backlog_active:0
-    repl_backlog_size:1048576
-    repl_backlog_first_byte_offset:0
-    repl_backlog_histlen:0
+    repl_backlog_active:1 # 开启复制缓冲区
+    repl_backlog_size:1048576 #缓冲区最大长度
+    repl_backlog_first_byte_offset:1 #起始偏移量，计算当前缓冲区的可用范围
+    repl_backlog_histlen:690 #已保存数据的有效长度
 
 如果当前服务器是一个从服务器的话，那么这个部分还会加上以下域：
 
-    master_host : 主服务器的 IP 地址。
-    master_port : 主服务器的 TCP 监听端口号。
-    master_link_status : 复制连接当前的状态， up 表示连接正常， down 表示连接断开。
-    master_last_io_seconds_ago : 距离最近一次与主服务器进行通信已经过去了多少秒钟。
-    master_sync_in_progress : 一个标志值，记录了主服务器是否正在与这个从服务器进行同步。
+    master_host:127.0.0.1 #主服务器的 IP 地址
+    master_port:6379 #主服务器的 TCP 监听端口号
+    master_link_status:up #复制连接当前的状态， up 表示连接正常， down 表示连接断开
+    master_last_io_seconds_ago:3 #距离最近一次与主服务器进行通信已经过去了多少秒钟
+    master_sync_in_progress:0 #一个标志值，记录了主服务器是否正在与这个从服务器进行同步
+    slave_repl_offset:2902 #自身的偏移量
+    slave_priority:100
+    slave_read_only:1
+    connected_slaves:0
+    master_replid:d7ffc06a335aa6d77dad778b8b3088d6e1212fbd
+    master_replid2:0000000000000000000000000000000000000000
+    master_repl_offset:2902
+    second_repl_offset:-1
+    repl_backlog_active:1 
+    repl_backlog_size:1048576 
+    repl_backlog_first_byte_offset:1
+    repl_backlog_histlen:2902
 
 如果同步操作正在进行，那么这个部分还会加上以下域：
 
@@ -175,7 +188,7 @@ replication : 主/从复制信息
 
 ## CPU
 cpu 部分记录了 CPU 的计算量统计信息，它包含以下域：
-    
+​    
     ## CPU
     used_cpu_sys:0.01 #Redis 服务器耗费的系统 CPU 
     used_cpu_user:0.00 #Redis 服务器耗费的用户 CPU 。
@@ -184,7 +197,7 @@ cpu 部分记录了 CPU 的计算量统计信息，它包含以下域：
 
 ## commandstats
 commandstats 部分记录了各种不同类型的命令的执行统计信息，比如命令执行的次数、命令耗费的 CPU 时间、执行每个命令耗费的平均 CPU 时间等等。对于每种类型的命令，这个部分都会添加一行以下格式的信息：
-    
+​    
 	cmdstat_XXX:calls=XXX,usec=XXX,usecpercall=XXX
 
 ## Cluster
@@ -195,7 +208,7 @@ cluster 部分记录了和集群有关的信息，它包含以下域：
 
 ## keyspace
     keyspace 部分记录了数据库相关的统计信息，比如数据库的键数量、数据库已经被删除的过期键数量等。对于每个数据库，这个部分都会添加一行以下格式的信息：
-    
+
 	dbXXX:keys=XXX,expires=XXX
 
 除上面给出的这些值以外， section 参数的值还可以是下面这两个：
