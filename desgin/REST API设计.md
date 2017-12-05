@@ -316,51 +316,53 @@ jwt的第三部分是一个签名信息。将上面的两个编码后的字符�
 3. 如果是MD5加密，需要在stringA的首尾加上appSecret。
 4. 将sign=signValue追加到URL参数的后面，向服务端发送请求。
 
-## 示例1
-**GET请求 查询安防记录的接口**
-
-	GET /alarms?type=21&alarmTimeStart=1469280456&alarmTimeEnd=1471958856&start=0&limit=20
-
+**下面通过两个例子介绍下sign的生成方式**
+**示例1：GET请求 查询安防记录的接口**
+```
+GET /alarms?type=21&alarmTimeStart=1469280456&alarmTimeEnd=1471958856&start=0&limit=20
+```
 1. 增加通用参数
-
-  /alarms?type=21&alarmTimeStart=1469280456&alarmTimeEnd=1471958856&start=0&limit=20&appKey=XXXXX&nonce=123456&signMethod=HMACMD5
-
+```
+/alarms?type=21&alarmTimeStart=1469280456&alarmTimeEnd=1471958856&start=0&limit=20&appKey=XXXXX&nonce=123456&signMethod=HMACMD5
+```
 2. 将所有的参数排序得到新的查询字符串
-
-  alarmTimeEnd=1471958856&alarmTimeStart=1469280456&appKey=XXXXX&limit=20&nonce=123456&signMethod=HMACMD5&start=0&type=21
-
+```
+alarmTimeEnd=1471958856&alarmTimeStart=1469280456&appKey=XXXXX&limit=20&nonce=123456&signMethod=HMACMD5&start=0&type=21
+```
 3. 将上一步得到的查询字符串使用HMACMD5加密，得到签名7B686C90ACE0193430774F4BE096F128，并追加到查询参数之后
-
-  alarmTimeEnd=1471958856&alarmTimeStart=1469280456& appKey=XXXXX&limit=20&nonce=123456&signMethod=HMACMD5&start=0&type=21 &sign= 7B686C90ACE0193430774F4BE096F128
-
+```
+alarmTimeEnd=1471958856&alarmTimeStart=1469280456& appKey=XXXXX&limit=20&nonce=123456&signMethod=HMACMD5&start=0&type=21 &sign= 7B686C90ACE0193430774F4BE096F128
+```
 4. 将上一步得到的查询字符串加入到接口中调用
+```
+/alarms? alarmTimeEnd=1471958856&alarmTimeStart=1469280456& appKey=XXXXX&limit=20&nonce=123456&signMethod=HMACMD5&start=0&type=21&sign= 7B686C90ACE0193430774F4BE096F128
+```
 
-  /alarms? alarmTimeEnd=1471958856&alarmTimeStart=1469280456& appKey=XXXXX&limit=20&nonce=123456&signMethod=HMACMD5&start=0&type=21&sign= 7B686C90ACE0193430774F4BE096F128
-
- ## 示例2
-**POST请求 用户登录**
-
-    POST /login
-    {"username":"foo","password":"bar"}
-
+**示例2：POST请求 用户登录**
+```
+POST /login
+{"username":"foo","password":"bar"}
+```
 1. 增加通用参数
-
-  /login?appKey=XXXXX&nonce=123456&signMethod=HMACMD5
-
+```
+/login?appKey=XXXXX&nonce=123456&signMethod=HMACMD5
+```
 2. 将请求体转换为JSON字符串后追加到参数列表中
-
-  appKey=XXXXX&nonce=123456&signMethod=HMACMD5&body={"username":"foo","password":"bar"}
-
+```
+appKey=XXXXX&nonce=123456&signMethod=HMACMD5&body={"username":"foo","password":"bar"}
+```
 3. 将所有的参数排序得到新的查询字符串
-
-  appKey=XXXXX&body={"username":"foo","password":"bar"}&nonce=123456&signMethod=HMACMD5
-
+```
+appKey=XXXXX&body={"username":"foo","password":"bar"}&nonce=123456&signMethod=HMACMD5
+```
 4. 将上一步得到的查询字符串使用HMACMD5加密，得到签名A61C44F04361DE0530F4EF2E363C4A45，并追加到查询参数之后（不包括body）
-
-  appKey=XXXXX&nonce=123456&signMethod=HMACMD5&sign= A61C44F04361DE0530F4EF2E363C4A45
-
+```
+appKey=XXXXX&nonce=123456&signMethod=HMACMD5&sign= A61C44F04361DE0530F4EF2E363C4A45
+```
 5. 将上一步得到的查询字符串加入到接口中调用
-  /login?appKey=XXXXX&nonce=123456&signMethod=HMACMD5&sign= A61C44F04361DE0530F4EF2E363C4A45
+```
+/login?appKey=XXXXX&nonce=123456&signMethod=HMACMD5&sign= A61C44F04361DE0530F4EF2E363C4A45
+```
 
 # 限流
 如果API服务支持限流，那么在响应头中必须带上下面的响应头
