@@ -549,3 +549,14 @@ There are 2 approaches: ETag and Last-Modified
 ETag: When generating a response, include a HTTP header ETag containing a hash or checksum of the representation. This value should change whenever the output representation changes. Now, if an inbound HTTP requests contains a If-None-Match header with a matching ETag value, the API should return a 304 Not Modified status code instead of the output representation of the resource.
 
 Last-Modified: This basically works like to ETag, except that it uses timestamps. The response header Last-Modified contains a timestamp in RFC 1123 format which is validated against If-Modified-Since. Note that the HTTP spec has had 3 different acceptable date formats and the server should be prepared to accept any one of them.
+
+
+
+# 服务端约束
+
+## 尽可能保证接口幂等性，不论是读还是写
+可以使用乐观锁或者时间戳保证,为了避免时序错乱导致的错误，更新的内容尽量使用增量数据而不是全量数据。
+## 尽可能支持降级
+## 向下兼容
+## 接口要保证无状态
+
