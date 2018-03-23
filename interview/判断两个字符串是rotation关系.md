@@ -1,0 +1,22 @@
+# 判断两个字符串是rotation关系
+
+什么是rotation关系："waterbottle" is a rotation of "erbottlewat"
+
+思路：将字符串waterbottle相加一次得到waterbottlewaterbottle，然后判断erbottlewat是不是被waterbottlewaterbottle包含即可
+
+```
+public class IsRotation {
+	public boolean isRotation(String s1, String s2) {
+		int len = s1.length();
+		/*check that s1 and s2 are equal length and not empty */
+		if(len == s2.length() && len > 0) {
+			/* concatenate s1 and s1 within new buffer */
+			String s1s1 = s1 + s1;
+			return isSubstring(s1s1, s2);
+		}
+
+		return false;
+	}
+}
+```
+
