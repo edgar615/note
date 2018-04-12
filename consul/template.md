@@ -357,6 +357,7 @@ server {
 
 {{range services}} {{$name := .Name}}
   location /{{$name}} {
+	rewrite /{{$name}}/(.*) /$1 break;
     proxy_pass http://{{$name}};
   }
 {{end}}
