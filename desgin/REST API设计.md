@@ -136,7 +136,30 @@ API的响应码应该参照下面的说明使用合适的响应码
     GET /applications/:applicationId 
     GET /users/:userId/
 
+## 不符合 CRUD 的情况
+
+在实际资源操作中，总会有一些不符合 `CRUD`（Create-Read-Update-Delete） 的情况，一般有几种处理方法。
+
+**使用 POST**
+
+为需要的动作增加一个 endpoint，使用 POST 来执行动作，比如 `POST /resend` 重新发送邮件。
+
+**增加控制参数**
+
+添加动作相关的参数，通过修改参数来控制动作。比如一个博客网站，会有把写好的文章“发布”的功能，可以用上面的 `POST /articles/{:id}/publish` 方法，也可以在文章中增加 `published:boolean` 字段，发布的时候就是更新该字段 `PUT /articles/{:id}?published=true`
+
+**把动作转换成资源**
+
+把动作转换成可以执行 `CRUD` 操作的资源， github 就是用了这种方法。
+
+比如“喜欢”一个 gist，就增加一个 `/gists/:id/star` 子资源，然后对其进行操作：“喜欢”使用 `PUT /gists/:id/star`，“取消喜欢”使用 `DELETE /gists/:id/star`。
+
+另外一个例子是 `Fork`，这也是一个动作，但是在 gist 下面增加 `forks`资源，就能把动作变成 `CRUD` 兼容的：`POST /gists/:id/forks` 可以执行用户 fork 的动作。
+
+
+
 # 通用请求头
+
 调用方必须包含下列HTTP请求头：
 
 	Content-Type:application/json;charset=utf-8
