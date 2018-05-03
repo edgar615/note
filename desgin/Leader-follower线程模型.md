@@ -24,3 +24,5 @@ L/F多线程模型，共6个关键点：
 （5）丢失leading后，following会尝试抢锁，抢到则变为leading，否则保持following；
 
 （6）following不干事，就是抢锁，力图成为leading；
+
+DelayQueue实现了L/F模型，后面再来阅读源码
