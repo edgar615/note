@@ -169,3 +169,9 @@ WHERE中使用虚拟列
 ```
 SELECT * from test where age_virtual > 10
 ```
+JSON_CONTAINS
+
+```
+select * from commodity where json_contains(ext, JSON_ARRAY (1), '$.physique')
+```
+
