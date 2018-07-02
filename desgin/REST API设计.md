@@ -156,6 +156,16 @@ API的响应码应该参照下面的说明使用合适的响应码
 
 另外一个例子是 `Fork`，这也是一个动作，但是在 gist 下面增加 `forks`资源，就能把动作变成 `CRUD` 兼容的：`POST /gists/:id/forks` 可以执行用户 fork 的动作。
 
+例如：
+
+```
+GET /articles/id/like：查看文章是否被点赞
+
+PUT /articles/id/like：点赞文章
+
+DELETE /articles/id/like：取消点赞
+```
+
 
 
 # 通用请求头
@@ -171,7 +181,20 @@ API的响应码应该参照下面的说明使用合适的响应码
     x-response-time 服务端处理耗时，单位毫秒
     x-server-time 服务端响应时间，取服务器时间，需要带上时区，例如2017-04-27T18:19:28+08:00
 
+# 统计信息
+API一般都需要记录用户的隐私数据，比如手机型号、系统版本等数据，约定使用请求头`x-user-analysis`传递，内容为下列JSON字符串的使用约定的加密算法加密后的字符串
+
+- osName 系统名称，如IOS，Android
+- osVersion 系统版本，如5.1
+- model 手机型号，如IPHONE 6
+- appName 应用名称
+- appVersion 应用版本号
+- deviceId 设备ID
+- 其他自定义属性
+
+
 # 安全认证
+
 如果API需要安全认证，调用方需要在请求头加上Authorization: Bearer <token>(登录后获取的token值)。
 如果API服务需要实现安全认证功能，建议使用JWT实现。
 ## JWT
