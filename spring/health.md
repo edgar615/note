@@ -612,7 +612,48 @@ public class SampleBean {
 }
 ```
 
-`/metrics`端点可以提供应用运行状态的完整度量指标报告，这项功能非常的实用，但是对于监控系统中的各项监控功能，它们的监控内容、数据收集频率都有所不同，如果我们每次都通过全量获取报告的方式来收集，略显粗暴。所以，我们还可以通过`/metrics/{name}`接口来更细粒度的获取度量信息，比如我们可以通过访问`/metrics/mem.free`来获取当前可用内存数量。
+`/metrics`端点可以提供应用运行状态的完整度量指标报告，这项功能非常的实用，但是对于监控系统中的各项监控功能，它们的监控内容、数据收集频率都有所不同，如果我们每次都通过全量获取报告的方式来收集，略显粗暴。所以，我们还可以通过`/metrics/{name}`接口来更细粒度的获取度量信息，比如我们可以通过访问`/metrics/jvm.memory.used来获取当前已用内存数量。
+
+```
+{
+    "name": "jvm.memory.used", 
+    "measurements": [
+        {
+            "statistic": "VALUE", 
+            "value": 458705144
+        }
+    ], 
+    "availableTags": [
+        {
+            "tag": "area", 
+            "values": [
+                "heap", 
+                "nonheap"
+            ]
+        }, 
+        {
+            "tag": "id", 
+            "values": [
+                "Compressed Class Space", 
+                "PS Old Gen", 
+                "PS Survivor Space", 
+                "Metaspace", 
+                "PS Eden Space", 
+                "Code Cache"
+            ]
+        }
+    ]
+}
+```
+
+通过tag参数，可以查看更详细的信息
+
+```
+/metrics/jvm.memory.used?tag=area:heap
+/metrics/jvm.memory.used?tag=area:heap&tag=id:PS%20Survivor%20Space
+```
+
+
 
 自动上报
 
