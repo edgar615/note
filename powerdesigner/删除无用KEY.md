@@ -11,8 +11,7 @@
 	
 	dim model 'current model
 	set model = ActiveModel
-	
-	
+
 	If (model Is Nothing) Then
 	   MsgBox "当前没有活动的模型。"
 	ElseIf Not model.IsKindOf(PdCDM.cls_Model) Then
