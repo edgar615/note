@@ -104,6 +104,23 @@ journalctl -u dnsmasq
 
 
 
+如果一个域名多个IP，通过address的方式不太合适，可以通过add-hosts的方式
+
+```
+addn-hosts=/etc/hosts.mysql
+```
+
+hosts.mysql的配置
+
+```
+192.168.1.202 mysql.local.com
+192.168.1.201 mysql.local.com
+```
+
+
+
+
+
 http://heylinux.com/archives/2231.html
 
 dnsmasq是一个轻量的支持DNS,DHCP以及TFTP协议的小工具，可以解决小范围的dns查询问题，譬如机房内网。
