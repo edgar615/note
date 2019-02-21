@@ -51,3 +51,32 @@ export PATH
 /usr/local/openresty/nginx/conf/nginx.conf
 ```
 
+
+
+有时候出现
+
+```
+[error] open() "/usr/local/openresty/nginx/logs/nginx.pid
+```
+
+执行
+
+```
+nginx -c /usr/local/openresty/nginx/conf/nginx.conf
+```
+
+
+
+有时候出现
+
+```
+nginx: [emerg] getpwnam("nginx")
+```
+
+执行
+
+```
+/usr/sbin/groupadd -f nginx
+/usr/sbin/useradd -g nginx nginx
+```
+
