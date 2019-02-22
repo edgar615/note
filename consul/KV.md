@@ -640,13 +640,18 @@ Consul同时维护了K/V对应的元数据，可以通过`-detailed`获取
 	redis/config/maxconns:25
 	redis/config/minconns:1
 	redis/config/users/admin:abcd1234
+	
+	#查找redis前缀
+	consul kv get -recurse redis
 
 `delete`用于删除K/V
-​	
-​	$ consul kv delete redis/config/minconns
-​	Success! Deleted key: redis/config/minconns
 
-使用`recurse`选项可以递归删除某个前缀
+```
+$ consul kv delete redis/config/minconns
+Success! Deleted key: redis/config/minconns
+```
+
+​	使用`recurse`选项可以递归删除某个前缀
 
 	$ consul kv delete -recurse redis
 	Success! Deleted keys with prefix: redis 
