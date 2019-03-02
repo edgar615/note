@@ -1,2 +1,0 @@
-有的插件安装失败，手动安装
-http://ftp.tsukuba.wide.ad.jp/software/jenkins/plugins/
