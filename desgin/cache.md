@@ -6,7 +6,7 @@ http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=404087915&idx=1&sn=07566419
 
 http://tech.meituan.com/cache_about.html
 
-http://coolshell.cn/articles/17416.html​
+http://coolshell.cn/articles/17416.html
 
 # 缓存算法
 
@@ -25,7 +25,7 @@ LRU和LFU的区别。LFU算法是根据在一段时间里数据项被使用的�
 3. 如果缓存中没有相关数据，则从数据库读取相关数据（缓存未命中“miss”），再将数据放入缓存，然后返回。
 
 伪代码：
- 
+
 	Object value = cache.get(key);
 	if (value != null) {
 		return value;
@@ -261,8 +261,8 @@ http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=2651959502&idx=1&sn=7a1c7d8
 # 去掉锁
 
 void AddCountByType(long type){
-	//不加锁
-	Array[type]++; // 计数++
+​	//不加锁
+​	Array[type]++; // 计数++
 }
 
 ![](http://mmbiz.qpic.cn/mmbiz_png/YrezxckhYOxuYpERfLS3Vr76QRkPuHfglLK2UzTuNT7BzpsO1egfCw4312wNoGgFdUBPE7fhdFrMRMyxAGLc6Q/640?wx_fmt=png&wxfrom=5&wx_lazy=1)
