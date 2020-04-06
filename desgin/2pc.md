@@ -1,8 +1,4 @@
-http://coolshell.cn/articles/10910.html
 
-http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=201414704&idx=1&sn=1d2ee4273bc9c6615b84827e9abac12c&mpshare=1&scene=23&srcid=101352qbTdFqo4Ad2izjNmcl#rd
-
-http://blog.jobbole.com/95632/
 
 # 2PC
 
@@ -197,9 +193,9 @@ Leslie Lamport 在三十多年前发表的论文《拜占庭将军问题》。
 Lamport 一直研究这类问题，发表了一系列论文。但综合总结一下就是回答下面三个问题：
 
     类似拜占庭将军这样的分布式一致性问题是否有解？
-
+    
     如果有解的话需要满足什么样的条件？
-
+    
     在特定前提条件的基础上，提出一种解法。
 
 
